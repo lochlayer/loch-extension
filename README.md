@@ -73,5 +73,3 @@ The build checks the two prover files against their recorded SHA-256 and stops i
 ## Licence
 
 Copyright © 2026 Loch. All rights reserved. The source is published to be read, reviewed and checked against the released builds. It may not be copied, modified or redistributed without written permission. See [`LICENSE`](LICENSE). Third-party components keep their own licences.
-
-No Loch token exists and none is for sale.
