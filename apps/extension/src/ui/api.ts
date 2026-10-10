@@ -18,6 +18,8 @@ export interface Api {
   /** Calls `listener` whenever the snapshot may have changed. Returns a function that stops it. */
   subscribe(listener: () => void): () => void;
   copy(text: string): Promise<boolean>;
+  /** Saves `text` as a file through the browser's own download. False if the browser would not. */
+  save(filename: string, text: string, type: string): boolean;
   openExpanded(): void;
   /** Asks the browser for permission to talk to these origins. Must be called from a click. */
   requestAccess(origins: string[]): Promise<boolean>;
@@ -52,6 +54,17 @@ export function extensionApi(popup: boolean): Api {
     async copy(text) {
       try {
         await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    save(filename, text, type) {
+      try {
+        const url = URL.createObjectURL(new Blob([text], { type }));
+        const link = Object.assign(document.createElement("a"), { href: url, download: filename });
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
         return true;
       } catch {
         return false;

@@ -39,6 +39,15 @@ export const ADDRESS_PREFIX = "loch";
 /** Human-readable part of a payment code (bech32m). */
 export const PAYMENT_CODE_PREFIX = "lochpay";
 
+/** Human-readable part of a claim link's code (bech32m). */
+export const CLAIM_PREFIX = "lochclaim";
+
+/** Human-readable part of a viewing key (bech32m). */
+export const VIEWING_KEY_PREFIX = "lochview";
+
+/** Domain separator of a claim's key seed: `sha256(utf8(this) || secret)`. */
+export const CLAIM_DOMAIN = "Loch claim v1";
+
 /**
  * How many payment codes in a row may be handed out without one of them being
  * paid, and how far past the last code known to be in use a wallet looks for

@@ -54,7 +54,7 @@ export type { ProgramErrorContext } from "./programErrors.js";
 export { bytesToField, fieldToBytes, publicAmountField } from "./field.js";
 export type { FieldLike } from "./field.js";
 
-export { deriveKeys, keyDerivationMessage, paymentCodeSecret } from "./keys.js";
+export { deriveKeys, keyDerivationMessage, keysFromSeed, paymentCodeSecret } from "./keys.js";
 export type { LochKeys } from "./keys.js";
 export {
   decodePaymentCode,
@@ -141,5 +141,40 @@ export type {
   SpendInput,
   TransactPublicInputs,
 } from "./transact.js";
+
+export { claimKeys, claimNote, claimState, createClaimSecret, decodeClaim, encodeClaim, isClaim } from "./claim.js";
+export type { Claim } from "./claim.js";
+
+export { decodeViewingKey, encodeViewingKey, isViewingKey, viewNotes, viewingKeyOf } from "./viewing.js";
+export type { ViewedNote, ViewingKey } from "./viewing.js";
+
+export {
+  MAX_REPORT_TRANSACTIONS,
+  buildSourceReport,
+  decodeReceipt,
+  decodeSourceReport,
+  encodeReceipt,
+  encodeSourceReport,
+  locateTransact,
+  nullifierOfOpening,
+  openInput,
+  spendTag,
+  verifyReceipt,
+  verifySourceReport,
+} from "./disclosure.js";
+export type {
+  DisclosureConnection,
+  FundsOrigin,
+  InputOpening,
+  LocatedTransact,
+  PaymentReceipt,
+  Rejected,
+  SourceReport,
+  TransactDisclosure,
+  TransactRecord,
+  VerifiedReceipt,
+  VerifiedSource,
+  VerifyOptions,
+} from "./disclosure.js";
 
 export * from "./wire.js";

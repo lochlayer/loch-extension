@@ -364,6 +364,21 @@ const STORIES: Record<string, Story> = {
     after: chain(click("a.link--quiet", "Receive"), click(".receive__code button", "Make a payment code"), reveal(".receive__code", "start")),
   },
   activity: { snapshot: { ...base, activity }, after: click(".popup__deep-head a", "All activity") },
+  "activity-receipt": {
+    snapshot: { ...base, activity: activity.map((entry) => (entry.id === "a2" ? { ...entry, record: true as const } : entry)) },
+    after: chain(click(".popup__deep-head a", "All activity"), click(".activity--full li:nth-child(2) button"), reveal(".activity__proof", "center")),
+  },
+  "activity-report": {
+    snapshot: { ...base, activity: activity.map((entry) => (entry.id === "a4" ? { ...entry, record: true as const } : entry)) },
+    after: chain(click(".popup__deep-head a", "All activity"), click(".activity--full li:nth-child(4) button"), reveal(".activity__proof", "center")),
+  },
+  "activity-claim-link": {
+    snapshot: { ...base, activity: activity.map(({ counterparty, ...entry }) => (entry.id === "a2" ? { ...entry, claim: true as const, record: true as const } : { ...entry, ...(counterparty ? { counterparty } : {}) })) },
+    after: chain(click(".popup__deep-head a", "All activity"), click(".activity--full li:nth-child(2) button"), reveal(".activity__proof", "center")),
+  },
+  "send-form-link": { snapshot: base, draft: { kind: "send", to: "", amount: "0.5" }, quote: quoteSpend, after: chain(() => undefined, click("#form-send-form .toggle")) },
+  "receive-collect": { snapshot: base, after: chain(click("a.link--quiet", "Receive"), reveal("#collect-title", "start")) },
+  "settings-viewing-key": { snapshot: base, after: chain(click(".address-chip"), click(".picklist__row", "SettingsEndpoints, palette, this device"), click(".settings button", "Show viewing key"), reveal("#set-viewing", "start")) },
   "activity-open": { snapshot: { ...base, activity }, after: chain(click(".popup__deep-head a", "All activity"), click(".activity--full li:nth-child(2) button")) },
   report: { snapshot: base, after: click(".score") },
   "report-statement": { snapshot: base, after: chain(click(".score"), scrollTo(".popup__view", 330)) },
@@ -419,6 +434,10 @@ const api: Api = {
         return ok(story.address ?? ({ ok: false, reason: "empty" } satisfies AddressCheck)) as UiReply<T>;
       case "surface-warnings":
         return ok(story.warnings ?? []) as UiReply<T>;
+      case "viewing-key":
+        return ok({ key: "lochview1" + PAYMENT_CODE.slice(8) + "qpzry9x8gf2tvdw0s3jn54khce6mua7lqpzry9x8gf2tvdw0s3jn" }) as UiReply<T>;
+      case "source-report":
+        return ok({ report: "{}", transactions: 4, undisclosed: 1 }) as UiReply<T>;
       case "payment-code":
         return ok(story.code ?? ({ status: "made", code: PAYMENT_CODE, made: 1 } satisfies PaymentCodeReply)) as UiReply<T>;
       default:
@@ -427,6 +446,7 @@ const api: Api = {
   },
   subscribe: () => () => undefined,
   copy: async () => true,
+  save: () => true,
   openExpanded: () => undefined,
   requestAccess: async () => true,
   draft: async () => story.draft ?? null,

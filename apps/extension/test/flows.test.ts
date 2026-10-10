@@ -279,7 +279,7 @@ describe("unlock", () => {
     expect(disk).not.toContain("2000000000");
     // The public address and the wallet's name are there in the clear, and nothing else about it.
     const stored = h.local.dump();
-    expect(Object.keys(stored).sort()).toEqual(["active", "settings", `vault:${h.wallet.address}:activity`, `vault:${h.wallet.address}:state`, "wallets"]);
+    expect(Object.keys(stored).sort()).toEqual(["active", "settings", `vault:${h.wallet.address}:activity`, `vault:${h.wallet.address}:records`, `vault:${h.wallet.address}:state`, "wallets"]);
   });
 });
 

@@ -9,13 +9,14 @@ import type { WalletInfo } from "./messages.js";
 
 // -------------------------------------------------------------------- flows
 
-export type FlowKind = "unlock" | "dive" | "send" | "surface" | "consolidate";
+export type FlowKind = "unlock" | "dive" | "send" | "surface" | "consolidate" | "claim";
 /** running: the worker is at it. waiting: on the user or their wallet. failed and done are final. */
 export type FlowStatus = "running" | "waiting" | "failed" | "done";
 
 export type UnlockStep = "opening" | "discovering" | "choosing" | "connecting" | "signing" | "signing-again" | "syncing" | "done";
 export type DiveStep = "checking" | "proving" | "screening" | "signing" | "sending" | "confirming" | "done";
 export type SpendStep = "checking" | "proving" | "sending" | "confirming" | "done";
+export type ClaimStep = SpendStep;
 
 /**
  * Why a flow stopped. `code` selects the words (src/shared/copy.ts); the other fields are the
@@ -92,7 +93,14 @@ export type FailureCode =
   | "nullifier-spent"
   | "stale-root"
   | "proof-failed"
-  | "sync-failed";
+  | "sync-failed"
+  // collecting a claim link
+  /** The pool this wallet reads does not hold the note the code is for (not yet, or another network). */
+  | "claim-missing"
+  /** The note was already collected: by the recipient, by the payer taking it back, or by anyone who saw the code. */
+  | "claim-taken"
+  /** The note does not cover the relayer fee of collecting it. */
+  | "claim-too-small";
 
 export interface StageView {
   label: string;
@@ -113,6 +121,8 @@ export interface FlowView {
   fee?: string;
   /** Shielded address (send) or public address (surface). */
   to?: string;
+  /** Send: the payment goes to a claim link, not to an address. */
+  claim?: true;
   /** The transaction id once there is one. Public. */
   signature?: string;
   failure?: Failure;
@@ -139,7 +149,7 @@ export interface FlowView {
 
 // ----------------------------------------------------------------- activity
 
-export type ActivityKind = "dive" | "send" | "receive" | "surface" | "consolidate" | "restored";
+export type ActivityKind = "dive" | "send" | "receive" | "surface" | "consolidate" | "restored" | "claim";
 /** submitted: sent, not seen on chain yet. unknown: it may or may not land. */
 export type ActivityStatus = "submitted" | "confirmed" | "failed" | "unknown";
 
@@ -159,6 +169,14 @@ export interface ActivityEntry {
   signature?: string;
   /** restored: how many notes. */
   count?: number;
+  /** send: the payment was made to a claim link. */
+  claim?: true;
+  /**
+   * Only in a snapshot, never stored: this device holds the record of the transaction, so a
+   * receipt (send), a source-of-funds report (surface) or the claim code (a send to a claim
+   * link) can be made for it.
+   */
+  record?: true;
 }
 
 // --------------------------------------------------------------------- scan
@@ -281,6 +299,20 @@ export type UiRequest =
   | { loch: "ui"; type: "quote"; want: "dive" | "spend" }
   | { loch: "ui"; type: "dive"; amount: string }
   | { loch: "ui"; type: "send"; to: string; amount: string; fee: string }
+  /** Pays `amount` to a new claim link. The note carries one relayer fee more, for collecting it. */
+  | { loch: "ui"; type: "send-claim"; amount: string; fee: string }
+  /** What a claim code is worth, before collecting it. */
+  | { loch: "ui"; type: "claim-check"; code: string }
+  /** Collects a claim code into the active wallet. */
+  | { loch: "ui"; type: "claim"; code: string; fee: string }
+  /** The claim code of a send this device made to a claim link (`id`: the activity entry). */
+  | { loch: "ui"; type: "claim-code"; id: string }
+  /** A payment receipt for a confirmed send (`id`: the activity entry). */
+  | { loch: "ui"; type: "receipt"; id: string }
+  /** A source-of-funds report for a confirmed surface (`id`: the activity entry). */
+  | { loch: "ui"; type: "source-report"; id: string }
+  /** The active wallet's viewing key. */
+  | { loch: "ui"; type: "viewing-key" }
   | { loch: "ui"; type: "surface"; to: string; amount: string; fee: string }
   | { loch: "ui"; type: "consolidate"; fee: string }
   | { loch: "ui"; type: "surface-warnings"; to: string; amount: string; fee: string }
@@ -315,6 +347,37 @@ export interface PaymentCodeReply {
   code: string;
   /** How many codes this wallet has made on this device, this one included. */
   made: number;
+}
+
+/** The answer to "claim-check". `own`: this device made the link, so collecting it takes the payment back. */
+export type ClaimCheck = { ok: true; amount: string; own: boolean } | { ok: false; reason: "empty" | "not-a-code" | "checksum" };
+
+/** The answer to "claim-code". The code is the money: whoever has it can collect. */
+export interface ClaimCodeReply {
+  code: string;
+  /** Lamports in the note. */
+  amount: string;
+}
+
+/** The answer to "receipt". */
+export interface ReceiptReply {
+  /** The receipt as text (one line of JSON), to hand to whoever asks for proof of the payment. */
+  receipt: string;
+}
+
+/** The answer to "source-report". */
+export interface SourceReportReply {
+  /** The report as text (JSON). */
+  report: string;
+  /** Transactions of this wallet the report opens, the withdrawal included. */
+  transactions: number;
+  /** Notes on the trail whose origin this device cannot show: received from someone else, or made before it kept records. */
+  undisclosed: number;
+}
+
+/** The answer to "viewing-key". */
+export interface ViewingKeyReply {
+  key: string;
 }
 
 /** The answer to "public-balance". */

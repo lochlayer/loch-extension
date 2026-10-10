@@ -93,7 +93,21 @@ export function deriveKeys(signature: Uint8Array, walletPublicKey?: Uint8Array):
       throw new LochError("INVALID_SIGNATURE", "the wallet did not return a valid signature of the key derivation message");
     }
   }
-  const seed = sha256(signature);
+  return keysFromSeed(sha256(signature));
+}
+
+/**
+ * The key set that follows from a 32-byte `seed`, by the derivation
+ * {@link deriveKeys} documents. A wallet's seed is the hash of its signature;
+ * a claim link's seed is a hash of the link's secret (`claimKeys`). The seed
+ * is as secret as the keys.
+ *
+ * @throws LochError `INVALID_ARGUMENT` if the seed is not 32 bytes.
+ */
+export function keysFromSeed(seed: Uint8Array): LochKeys {
+  if (!(seed instanceof Uint8Array) || seed.length !== 32) {
+    throw new LochError("INVALID_ARGUMENT", "a key seed must be 32 bytes");
+  }
   const privateKey = mod(bytesToBigIntBE(seed));
   const encryptionSecret = sha256(concatBytes(utf8(NOTE_ENCRYPTION_DOMAIN), seed));
   return {

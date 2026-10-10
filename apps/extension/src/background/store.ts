@@ -7,6 +7,9 @@
 //     vault:<address>:state        the SDK wallet state (leaves, notes) and the
 //                                  spends sent but not yet seen on chain       ENCRYPTED
 //     vault:<address>:activity     the activity log                            ENCRYPTED
+//     vault:<address>:records      the wallet's own transactions, opened: what
+//                                  receipts, reports and claim links are made
+//                                  from (records.ts)                           ENCRYPTED
 //     vault:<address>:scan         the last leak scan (report and transfers)   ENCRYPTED
 //
 //   chrome.storage.session (memory; gone when the browser closes)
@@ -28,6 +31,7 @@ import { isBase58Address, isBase64, isNonEmptyString, isRecord, isSafeInteger } 
 import type { ActivityEntry, ScanView } from "../shared/view.js";
 import type { KV } from "./kv.js";
 import type { PendingSpend } from "./pending.js";
+import { type TxRecord, parseRecords } from "./records.js";
 import { type SealedRecord, VaultError, deriveVaultKey, isSealedRecord, newVaultSalt, open, seal } from "./vault.js";
 
 export interface WalletRecord {
@@ -59,6 +63,8 @@ export interface WalletRuntime {
   pending: PendingSpend[];
   /** Commitments (decimal) of notes this device created itself, newest last. Saved with the state. */
   ownOutputs: string[];
+  /** This device's own transactions, opened (records.ts), oldest first. */
+  records: TxRecord[];
 }
 
 /** How many of its own output commitments a wallet remembers. */
@@ -163,6 +169,7 @@ export class Store {
       neverSynced: true,
       pending: [],
       ownOutputs: [],
+      records: [],
     };
     this.runtimes.set(address, runtime);
     await this.saveState(runtime);
@@ -232,6 +239,7 @@ export class Store {
     }
     const activity = await this.openOr<ActivityEntry[]>(vaultKey, address, "activity", []);
     const scan = await this.openOr<StoredScan | null>(vaultKey, address, "scan", null);
+    const records = parseRecords(await this.openOr<unknown>(vaultKey, address, "records", []));
     const runtime: WalletRuntime = {
       address,
       walletName: record.walletName,
@@ -245,6 +253,7 @@ export class Store {
       neverSynced,
       pending,
       ownOutputs,
+      records,
     };
     // Forgotten while this was being read: there is no such wallet any more.
     if (this.forgotten.has(address)) return null;
@@ -289,6 +298,10 @@ export class Store {
 
   async saveActivity(runtime: WalletRuntime): Promise<boolean> {
     return this.write(runtime, "activity", runtime.activity);
+  }
+
+  async saveRecords(runtime: WalletRuntime): Promise<boolean> {
+    return this.write(runtime, "records", runtime.records);
   }
 
   async saveScan(runtime: WalletRuntime): Promise<boolean> {

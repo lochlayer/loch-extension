@@ -157,9 +157,35 @@ export interface SpendRecord extends FlowBase {
   handed?: boolean;
   /** Times the proof was made again because its root had aged out. */
   reproved: number;
+  /**
+   * SECRET. Send to a claim link: the link's secret, base64. `to` is then the address of the
+   * claim's keys. Session storage and the vault only; never part of a FlowView.
+   */
+  claim?: string;
 }
 
-export type FlowRecord = UnlockRecord | DiveRecord | SpendRecord;
+/** Collecting a claim link: the note the code holds is moved to this wallet's own address. */
+export interface ClaimRecord extends FlowBase {
+  kind: "claim";
+  address: string;
+  /** SECRET. The claim code. Session storage only; never part of a FlowView. */
+  code: string;
+  /** Lamports in the note. */
+  amount: string;
+  /** The relayer fee the user saw and agreed to. It comes out of the note. */
+  fee: string;
+  relayer?: string;
+  /** The proven request. Kept so a retry need not prove again. */
+  request?: RelayRequest;
+  /** Commitments (decimal) of the notes every proof of the flow creates. All proofs spend the one note, so at most one lands. */
+  outputs?: string[];
+  /** A request of this flow was given to a relayer, or was about to be. */
+  handed?: boolean;
+  /** Times the proof was made again because its root had aged out. */
+  reproved: number;
+}
+
+export type FlowRecord = UnlockRecord | DiveRecord | SpendRecord | ClaimRecord;
 
 /** A failure on its way up the stack. */
 export class FlowFailure extends Error {
@@ -361,11 +387,20 @@ export class Core {
       view.connectUrl = flow.connectUrl;
       view.proofKept = flow.data !== undefined;
       view.cancellable = (flow.status === "running" || flow.status === "waiting") && ["checking", "proving", "screening", "signing"].includes(flow.step);
+    } else if (flow.kind === "claim") {
+      // Never the code: it is the money.
+      view.amount = flow.amount;
+      view.fee = flow.fee;
+      view.proofKept = flow.request !== undefined;
+      view.bound = flow.handed === true;
+      view.cancellable = flow.status === "running" && ["checking", "proving"].includes(flow.step);
     } else {
       view.amount = flow.amount;
       view.fee = flow.fee;
       // The interface is shown who is paid, never a payment code: its secret stays in the worker.
-      if (flow.to) view.to = flow.payee ?? flow.to;
+      // A claim link has no payee to show: the address of its keys means nothing to anyone.
+      if (flow.claim) view.claim = true;
+      else if (flow.to) view.to = flow.payee ?? flow.to;
       view.proofKept = flow.request !== undefined;
       view.bound = flow.handed === true;
       view.cancellable = flow.status === "running" && ["checking", "proving"].includes(flow.step);
@@ -419,7 +454,9 @@ export class Core {
         notes: totals.notes,
         settling: totals.settling,
       };
-      snapshot.activity = runtime.activity;
+      // Which entries this device can make a receipt, a report or a claim code for.
+      const recorded = new Set(runtime.records.map((record) => record.flowId));
+      snapshot.activity = runtime.activity.map((entry) => (entry.status === "confirmed" && recorded.has(entry.id) ? { ...entry, record: true as const } : entry));
       const run = await this.scanRun(active);
       snapshot.scan = { ...run, ...(runtime.scan ?? {}) };
     }

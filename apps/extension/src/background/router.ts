@@ -12,9 +12,25 @@ import { fromLamportString } from "../shared/amounts.js";
 import { isBase58Address, isDecimalString, isNonEmptyString, isRecord, isString } from "../shared/guards.js";
 import { fixedConnectUrl } from "../shared/build.js";
 import { type ContentConfig, type ContentMessage, type ReviewReply, type SenderLike, senderOrigin } from "../shared/messages.js";
-import type { AddressCheck, PaymentCodeReply, PublicBalanceReply, Quote, Snapshot, SurfaceWarningView, UiReply, UiRequest } from "../shared/view.js";
+import type {
+  AddressCheck,
+  ClaimCheck,
+  ClaimCodeReply,
+  PaymentCodeReply,
+  PublicBalanceReply,
+  Quote,
+  ReceiptReply,
+  Snapshot,
+  SourceReportReply,
+  SurfaceWarningView,
+  UiReply,
+  UiRequest,
+  ViewingKeyReply,
+} from "../shared/view.js";
 import { acceptBridgeAnswer, closeBridgeTab, noteContentScript } from "./bridge.js";
+import { checkClaim, startClaim } from "./claimFlow.js";
 import type { Core } from "./core.js";
+import { claimCodeFor, receiptFor, sourceReportFor, viewingKeyFor } from "./disclose.js";
 import { cancelFlow, chooseWallet, dismissFlow, flowBridgeAnswer, retryFlow, startDive, startSpend, startUnlock } from "./flows.js";
 import { assertAllowedCluster, describeNetworkError, readCluster } from "./network.js";
 import { makePaymentCode, payeeOf } from "./paymentCode.js";
@@ -41,6 +57,13 @@ const UI_TYPES = [
   "quote",
   "dive",
   "send",
+  "send-claim",
+  "claim-check",
+  "claim",
+  "claim-code",
+  "receipt",
+  "source-report",
+  "viewing-key",
   "surface",
   "consolidate",
   "surface-warnings",
@@ -72,6 +95,18 @@ export function parseUiRequest(value: unknown): UiRequest | null {
     case "send":
       if (!isString(value.to, 200) || !isDecimalString(value.amount) || !isDecimalString(value.fee)) return null;
       return { loch: "ui", type: "send", to: value.to, amount: value.amount, fee: value.fee };
+    case "send-claim":
+      if (!isDecimalString(value.amount) || !isDecimalString(value.fee)) return null;
+      return { loch: "ui", type: "send-claim", amount: value.amount, fee: value.fee };
+    case "claim-check":
+      return isString(value.code, 400) ? { loch: "ui", type: "claim-check", code: value.code } : null;
+    case "claim":
+      if (!isString(value.code, 400) || !isDecimalString(value.fee)) return null;
+      return { loch: "ui", type: "claim", code: value.code, fee: value.fee };
+    case "claim-code":
+    case "receipt":
+    case "source-report":
+      return isNonEmptyString(value.id, 64) ? { loch: "ui", type: value.type, id: value.id } : null;
     case "surface":
     case "surface-warnings":
       if (!isBase58Address(value.to) || !isDecimalString(value.amount) || !isDecimalString(value.fee)) return null;
@@ -159,6 +194,22 @@ export async function handleUi(core: Core, message: unknown): Promise<UiReply> {
         decodeRecipient(request.to);
         await startSpend(core, "send", { to: request.to, amount: amountOf(request.amount), fee: fromLamportString(request.fee) });
         return ok(null);
+      case "send-claim":
+        await startSpend(core, "send", { amount: amountOf(request.amount), fee: fromLamportString(request.fee), claim: true });
+        return ok(null);
+      case "claim-check":
+        return ok<ClaimCheck>(await checkClaim(core, request.code));
+      case "claim":
+        await startClaim(core, request.code, fromLamportString(request.fee));
+        return ok(null);
+      case "claim-code":
+        return ok<ClaimCodeReply>(await claimCodeFor(core, request.id));
+      case "receipt":
+        return ok<ReceiptReply>(await receiptFor(core, request.id));
+      case "source-report":
+        return ok<SourceReportReply>(await sourceReportFor(core, request.id));
+      case "viewing-key":
+        return ok<ViewingKeyReply>(await viewingKeyFor(core));
       case "surface":
         await startSpend(core, "surface", { to: new PublicKey(request.to).toBase58(), amount: amountOf(request.amount), fee: fromLamportString(request.fee) });
         return ok(null);

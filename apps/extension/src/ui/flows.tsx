@@ -35,6 +35,31 @@ function FlowRows({ flow, snapshot }: { flow: FlowView; snapshot: Snapshot }) {
     return null;
   }
   const amount = BigInt(flow.amount ?? "0");
+  if (flow.kind === "claim") {
+    const fee = BigInt(flow.fee ?? "0");
+    return (
+      <dl class="deflist deflist--kv">
+        <div class="deflist__row">
+          <dt>In the link</dt>
+          <dd>
+            <Amount lamports={amount} shielded exact /> SOL
+          </dd>
+        </div>
+        <div class="deflist__row">
+          <dt>Relayer fee</dt>
+          <dd>
+            <Amount lamports={fee} exact /> SOL
+          </dd>
+        </div>
+        <div class="deflist__row">
+          <dt>Arrives in your shielded balance</dt>
+          <dd>
+            <Amount lamports={amount > fee ? amount - fee : 0n} shielded exact /> SOL
+          </dd>
+        </div>
+      </dl>
+    );
+  }
   return (
     <dl class="deflist deflist--kv">
       {flow.kind === "dive" ? (
@@ -48,9 +73,13 @@ function FlowRows({ flow, snapshot }: { flow: FlowView; snapshot: Snapshot }) {
         <div class="deflist__row">
           <dt>To</dt>
           <dd>
-            <span class={`fig ${flow.kind === "send" ? "is-shielded" : "is-public"}`} title={flow.to}>
-              {shortAddress(flow.to ?? "")}
-            </span>
+            {flow.claim ? (
+              <span class="is-shielded">A claim link</span>
+            ) : (
+              <span class={`fig ${flow.kind === "send" ? "is-shielded" : "is-public"}`} title={flow.to}>
+                {shortAddress(flow.to ?? "")}
+              </span>
+            )}
           </dd>
         </div>
       )}
@@ -299,7 +328,7 @@ const ADDRESS_PROBLEM: Record<Exclude<AddressCheck, { ok: true }>["reason"], str
   "not-an-address": "That is not a Solana address. One is 32 to 44 letters and digits.",
 };
 
-function useQuote(api: Api, want: "dive" | "spend"): { quote: Quote | null; error: string | null; reload: () => void } {
+export function useQuote(api: Api, want: "dive" | "spend"): { quote: Quote | null; error: string | null; reload: () => void } {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [round, setRound] = useState(0);
@@ -377,6 +406,9 @@ const SURFACE_WARNING: Record<SurfaceWarningView["id"], (warning: SurfaceWarning
 
 export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind: FormKind; snapshot: Snapshot; api: Api; onClose: () => void; openSettings: () => void }) {
   const [to, setTo] = useState("");
+  /** Send: pay a claim link in place of an address, for someone who has no Loch yet. */
+  const [asLink, setAsLink] = useState(false);
+  const linked = kind === "send" && asLink;
   const [amountText, setAmountText] = useState("");
   const [touched, setTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -386,7 +418,7 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
   const [heldUntil, setHeldUntil] = useState<number | null>(null);
   const restored = useRef(false);
   const { quote, error: quoteError, reload } = useQuote(api, kind === "dive" ? "dive" : "spend");
-  const address = useAddressCheck(api, kind === "send" ? "shielded" : "public", kind === "dive" ? "" : to);
+  const address = useAddressCheck(api, kind === "send" ? "shielded" : "public", kind === "dive" || linked ? "" : to);
   const shielded = snapshot.shielded;
   const now = api.now();
 
@@ -489,18 +521,22 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
       );
     }
     if (fee !== null) {
+      // A claim link carries a second fee: the one its recipient pays to collect it.
+      const fees = linked ? 2n * fee : fee;
       // The most one transaction can move: the two largest notes, less the fee.
-      ceiling = max(0n, largestPair - fee);
+      ceiling = max(0n, largestPair - fees);
       const minimum = kind === "surface" ? max(SYSTEM_RENT_MINIMUM, BigInt(quote?.relayer?.minWithdrawal ?? "0")) : 0n;
       if (amount !== null) {
-        if (amount + fee > spendable) {
+        if (amount + fees > spendable) {
           amountError =
-            spendable <= fee
-              ? "Your shielded balance does not cover the relayer’s fee."
-              : `You can ${kind === "send" ? "send" : "surface"} at most ${exactSol(spendable - fee)} SOL: what can be spent now, less the relayer’s fee.`;
+            spendable <= fees
+              ? linked
+                ? "Your shielded balance does not cover the two relayer fees of a claim link."
+                : "Your shielded balance does not cover the relayer’s fee."
+              : `You can ${kind === "send" ? "send" : "surface"} at most ${exactSol(spendable - fees)} SOL: what can be spent now, less the relayer’s ${linked ? "fees" : "fee"}.`;
         } else if (kind === "surface" && amount < minimum) {
           amountError = `Surface at least ${pub(exactSol(minimum))} SOL. A new address must hold ${pub(exactSol(SYSTEM_RENT_MINIMUM))} SOL to exist.`;
-        } else if (amount + fee > largestPair) {
+        } else if (amount + fees > largestPair) {
           needsConsolidation = true;
         }
       }
@@ -515,8 +551,8 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
   }
 
   const formatError = touched && !parsed.ok ? amountProblemText(parsed.problem) : null;
-  const addressError = kind !== "dive" && touched && to.trim() === "" ? ADDRESS_PROBLEM.empty : address && !address.ok ? ADDRESS_PROBLEM[address.reason] : null;
-  const addressOk = kind === "dive" || (address?.ok ?? false);
+  const addressError = kind === "dive" || linked ? null : touched && to.trim() === "" ? ADDRESS_PROBLEM.empty : address && !address.ok ? ADDRESS_PROBLEM[address.reason] : null;
+  const addressOk = kind === "dive" || linked || (address?.ok ?? false);
   const ready = quote !== null && blocked === null && amount !== null && amountError === null && addressOk && !needsConsolidation && !submitting;
 
   // Surfacing: what would tie this withdrawal to a deposit.
@@ -543,7 +579,9 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
     const reply =
       kind === "dive"
         ? await api.call({ loch: "ui", type: "dive", amount: amount.toString() })
-        : kind === "send"
+        : linked
+          ? await api.call({ loch: "ui", type: "send-claim", amount: amount.toString(), fee: (fee ?? 0n).toString() })
+          : kind === "send"
           ? await api.call({ loch: "ui", type: "send", to: destination ?? "", amount: amount.toString(), fee: (fee ?? 0n).toString() })
           : await api.call({ loch: "ui", type: "surface", to: destination ?? "", amount: amount.toString(), fee: (fee ?? 0n).toString() });
     setSubmitting(false);
@@ -558,13 +596,13 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
     if (!reply.ok) setSubmitError("Loch could not start this. Close the sheet and try again. Nothing was sent.");
   };
 
-  const total = amount !== null && fee !== null ? amount + fee : null;
+  const total = amount !== null && fee !== null ? amount + (linked ? 2n * fee : fee) : null;
   // An earlier payment to the same address whose outcome is not known: its request is with a
   // relayer and may still land. A new one is a second payment, made from other notes. A payment
   // code is known to the activity list by the address inside it.
-  const payee = address?.ok ? (address.payee ?? address.address) : null;
+  const payee = !linked && address?.ok ? (address.payee ?? address.address) : null;
   const earlier = kind === "dive" || payee === null ? undefined : snapshot.activity.find((entry) => entry.kind === kind && entry.counterparty === payee && (entry.status === "unknown" || entry.status === "submitted"));
-  const primaryLabel = needsConsolidation ? "Combine notes" : kind === "surface" && (warnings.length > 0 || earlier) ? "Surface anyway" : kind === "send" && earlier ? "Send anyway" : ACTION_NAME[kind];
+  const primaryLabel = needsConsolidation ? "Combine notes" : kind === "surface" && (warnings.length > 0 || earlier) ? "Surface anyway" : kind === "send" && earlier ? "Send anyway" : linked ? "Pay and make the link" : ACTION_NAME[kind];
 
   return (
     <Sheet
@@ -598,7 +636,24 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
           else void submit();
         }}
       >
-        {kind !== "dive" && (
+        {kind === "send" && (
+          <label class="choice">
+            <input class="toggle" type="checkbox" role="switch" checked={asLink} onChange={(event) => setAsLink(event.currentTarget.checked)} />
+            <span>
+              Pay with a claim link
+              <small>For someone who has no Loch yet, and so no shielded address to give you.</small>
+            </span>
+          </label>
+        )}
+        {linked && (
+          <p class="notice notice--inline">
+            <Icon name="info" />
+            <span>
+              Loch pays the amount to a link you send them yourself. Whoever opens the link first collects it, into their own Loch or to any Solana address, so send it privately. Until then you can take it back.
+            </span>
+          </p>
+        )}
+        {kind !== "dive" && !linked && (
           <Field
             label={kind === "send" ? "To a shielded address or a payment code" : "To a public Solana address"}
             id={`${kind}-to`}
@@ -700,6 +755,12 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
                 <dt>Relayer fee</dt>
                 <dd>{fee !== null ? <Amount lamports={fee} exact /> : <span class="t-quiet">{quote === null ? "Asking the relayer" : "Not known"}</span>}{fee !== null && " SOL"}</dd>
               </div>
+              {linked && (
+                <div class="deflist__row">
+                  <dt>Fee for collecting, paid ahead</dt>
+                  <dd>{fee !== null ? <Amount lamports={fee} exact /> : <span class="t-quiet">Not known</span>}{fee !== null && " SOL"}</dd>
+                </div>
+              )}
               <div class="deflist__row">
                 <dt>Leaves your shielded balance</dt>
                 <dd>{total !== null ? <Amount lamports={total} shielded exact /> : <span class="t-quiet">Enter an amount</span>}{total !== null && " SOL"}</dd>

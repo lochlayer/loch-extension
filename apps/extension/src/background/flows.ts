@@ -1,4 +1,5 @@
-// The four flows: unlock, dive in, send privately (and consolidate), surface.
+// The flows: unlock, dive in, send privately (and consolidate), surface. Collecting a claim
+// link is a fifth, in claimFlow.ts; this file starts, drives and resumes it with the others.
 //
 // Each is a small state machine whose record lives in chrome.storage.session. A step is
 // entered by writing the record, then doing the work, so that after a restart the worker knows
@@ -38,8 +39,11 @@ import {
   applyScreenerSignature,
   buildTransactInstruction,
   buildTransactTransaction,
+  claimKeys,
+  createClaimSecret,
   decodeRecipient,
   decodeTransactArgs,
+  encodeShieldedAddress,
   fetchPoolConfig,
   fetchTreeAccount,
   parseProgramError,
@@ -61,11 +65,13 @@ import type { BridgeAnswer, BridgeRequest, WalletInfo } from "../shared/messages
 import type { Failure, SyncView } from "../shared/view.js";
 import { addActivity, setActivityStatus } from "./activity.js";
 import { closeBridgeTab, ensureBridgeTab, pendingBridge, sendBridgeRequest } from "./bridge.js";
+import { resumeClaim, stepClaim } from "./claimFlow.js";
 import { BRIDGE_TTL_MS, type Core, type DiveRecord, FlowFailure, type FlowProof, type FlowRecord, type SpendRecord, type UnlockRecord, fail } from "./core.js";
 import { type Chain, MainnetRefusedError, assertAllowedCluster, describeNetworkError, isNetworkFailure, readCluster } from "./network.js";
 import { payeeOf } from "./paymentCode.js";
 import { type PendingSpend, chainRootsOf, hasLanded, inputSpent, onlyNotes, proofExpired, spendableNotes, withLocks } from "./pending.js";
 import { noteSpend, storePublicBalance } from "./publicBalance.js";
+import { addRecord, recordOf } from "./records.js";
 import type { WalletRuntime } from "./store.js";
 import { syncWalletNow } from "./sync.js";
 import { VaultError } from "./vault.js";
@@ -87,12 +93,12 @@ const SPEND_POLL_MS = 1_500;
 
 // ------------------------------------------------------------------ starting
 
-function base(core: Core, kind: FlowRecord["kind"], address: string | null, step: string) {
+export function base(core: Core, kind: FlowRecord["kind"], address: string | null, step: string) {
   const now = core.env.now();
   return { id: randomToken(), kind, address, status: "running" as const, step, stepStartedAt: now, createdAt: now, attempt: 1 };
 }
 
-async function begin(core: Core, flow: FlowRecord): Promise<void> {
+export async function begin(core: Core, flow: FlowRecord): Promise<void> {
   const current = await core.flow();
   if (current && (current.status === "running" || current.status === "waiting")) {
     throw new LochError("INVALID_ARGUMENT", "another action is still in progress");
@@ -120,7 +126,7 @@ export async function startUnlock(core: Core, expected: string | null): Promise<
   await begin(core, flow);
 }
 
-async function unlocked(core: Core): Promise<WalletRuntime> {
+export async function unlocked(core: Core): Promise<WalletRuntime> {
   const address = await core.store.active();
   const runtime = address ? await core.store.runtime(address) : null;
   if (!runtime) throw new LochError("INVALID_ARGUMENT", "unlock the wallet first");
@@ -140,8 +146,19 @@ export async function startDive(core: Core, amount: bigint): Promise<void> {
   await begin(core, flow);
 }
 
-export async function startSpend(core: Core, kind: SpendRecord["kind"], input: { to?: string; amount: bigint; fee: bigint }): Promise<void> {
+/**
+ * `claim` (a send only): pay a new claim link instead of an address. The link's secret is made
+ * here; the note is paid to the address of the keys that follow from it, and carries one relayer
+ * fee on top of `amount`, so that whoever collects it ends up with `amount`.
+ */
+export async function startSpend(core: Core, kind: SpendRecord["kind"], input: { to?: string; amount: bigint; fee: bigint; claim?: boolean }): Promise<void> {
   const runtime = await unlocked(core);
+  let claim: string | undefined;
+  if (kind === "send" && input.claim) {
+    const secret = createClaimSecret();
+    claim = toBase64(secret);
+    input = { ...input, to: encodeShieldedAddress(claimKeys(secret)), amount: input.amount + input.fee };
+  }
   if (kind === "send") decodeRecipient(input.to ?? "");
   if (kind === "surface") new PublicKey(input.to ?? "");
   // The limit is the worker's to enforce, whatever the interface sent.
@@ -157,6 +174,7 @@ export async function startSpend(core: Core, kind: SpendRecord["kind"], input: {
     ...(kind === "consolidate" ? {} : { to: input.to }),
     // Paid to a payment code: the address in it, which is what the interface and the activity list are given.
     ...(kind === "send" && input.to && payeeOf(input.to) !== input.to ? { payee: payeeOf(input.to) } : {}),
+    ...(claim ? { claim } : {}),
   };
   await begin(core, flow);
 }
@@ -179,6 +197,7 @@ async function run(core: Core): Promise<void> {
       await checkCancel(core, flow);
       if (flow.kind === "unlock") await stepUnlock(core, flow);
       else if (flow.kind === "dive") await stepDive(core, flow);
+      else if (flow.kind === "claim") await stepClaim(core, flow);
       else await stepSpend(core, flow);
     } catch (error) {
       const failure = toFailure(error, flow, await core.settings());
@@ -224,7 +243,7 @@ async function checkCancel(core: Core, flow: FlowRecord): Promise<void> {
   throw fail("cancelled");
 }
 
-function toFailure(error: unknown, flow: FlowRecord, settings: { rpcUrl: string; relayerUrl: string; screenerUrl: string }): Failure {
+export function toFailure(error: unknown, flow: FlowRecord, settings: { rpcUrl: string; relayerUrl: string; screenerUrl: string }): Failure {
   if (error instanceof FlowFailure) return error.failure;
   if (error instanceof MainnetRefusedError) return { code: "mainnet", moved: "no", retry: false };
   if (error instanceof VaultError) return { code: error.reason === "wrong-key" ? "signature-changed" : "internal", moved: "no", retry: error.reason === "wrong-key" };
@@ -448,6 +467,10 @@ async function stepDive(core: Core, flow: DiveRecord): Promise<void> {
       flow.outputs = prepared.outputs.map((output) => output.commitment.toString());
       runtime.ownOutputs.push(...flow.outputs);
       await core.store.saveState(runtime);
+      // A deposit has two inputs like every transaction: two dummies. Only this device can ever
+      // show that they held nothing, which is what a report that ends at this deposit needs.
+      runtime.records = addRecord(runtime.records, recordOf(flow.id, prepared, runtime.keys.publicKey, core.env.now()), runtime.state, core.env.now());
+      await core.store.saveRecords(runtime);
       await core.enter(flow, "screening");
       return;
     }
@@ -545,14 +568,14 @@ async function stepDive(core: Core, flow: DiveRecord): Promise<void> {
   }
 }
 
-function wireDetail(url: string, error: unknown): string {
+export function wireDetail(url: string, error: unknown): string {
   const host = new URL(url).host;
   // The code and, for a request that got no answer, the one word the SDK gives for why.
   if (error instanceof WireError) return `${host}: ${error.code}${error.reason ? ` (${error.reason})` : ""}`;
   return describeNetworkError(url, error);
 }
 
-function wireReason(error: unknown): Pick<Failure, "reason"> {
+export function wireReason(error: unknown): Pick<Failure, "reason"> {
   return error instanceof WireError && error.reason ? { reason: error.reason } : {};
 }
 
@@ -674,7 +697,8 @@ function spendActivity(runtime: WalletRuntime, flow: SpendRecord, status: "confi
     amount: flow.amount,
     fee: feePaid(runtime, flow),
     // For a payment code, the address in it: the secret has no business in the activity list.
-    ...(flow.to ? { counterparty: flow.payee ?? flow.to } : {}),
+    // For a claim link there is nobody to name: the address of its keys is nobody's.
+    ...(flow.claim ? { claim: true as const } : flow.to ? { counterparty: flow.payee ?? flow.to } : {}),
     // A transaction id is the relayer's word. It is shown only with a transfer the chain confirmed.
     ...(status === "confirmed" && flow.signature ? { signature: flow.signature } : {}),
   } as const;
@@ -713,7 +737,7 @@ async function reserve(core: Core, runtime: WalletRuntime, flow: SpendRecord): P
     createdAt: existing?.createdAt ?? core.env.now(),
     outcome: "unknown",
     proofs: (flow.proofs ?? []).map(({ root, leaves, fee: paid }) => ({ root, leaves, fee: paid })),
-    entry: { amount: flow.amount, fee: fee.toString(), ...(flow.to ? { counterparty: flow.to } : {}) },
+    entry: { amount: flow.amount, fee: fee.toString(), ...(flow.claim ? { claim: true as const } : flow.to ? { counterparty: flow.to } : {}) },
   };
   runtime.pending = [...runtime.pending.filter((item) => item.flowId !== flow.id), entry];
   await core.store.saveState(runtime);
@@ -734,7 +758,7 @@ async function recordUnknown(core: Core, runtime: WalletRuntime, flow: SpendReco
   await core.store.saveActivity(runtime);
 }
 
-function synced(sync: SyncView): boolean {
+export function synced(sync: SyncView): boolean {
   return sync.status === "synced" || sync.status === "behind";
 }
 
@@ -892,6 +916,11 @@ async function stepSpend(core: Core, flow: SpendRecord): Promise<void> {
       flow.outputs = outputs;
       flow.proofs = [...(flow.proofs ?? []), proof];
       runtime.ownOutputs.push(...outputs);
+      // Written before the proof leaves the device. For a claim link this is also where its
+      // secret reaches the disk: from here on the payment can be taken back whatever happens.
+      const payee = flow.kind === "send" && flow.to ? { to: flow.payee ?? flow.to, ...(flow.claim ? { claim: flow.claim } : {}) } : undefined;
+      runtime.records = addRecord(runtime.records, recordOf(flow.id, prepared, runtime.keys.publicKey, core.env.now(), payee), runtime.state, core.env.now());
+      if (!(await core.store.saveRecords(runtime)) && flow.claim) throw fail("locked");
       await reserve(core, runtime, flow);
       await core.enter(flow, "sending");
       return;
@@ -1057,12 +1086,12 @@ export async function retryFlow(core: Core, fee?: bigint): Promise<void> {
   const flow = await core.flow();
   if (!flow || flow.status !== "failed" || !flow.failure?.retry) {
     // A changed fee is the one failure that is not retried as it is, but may be with the new fee.
-    if (!(flow && flow.status === "failed" && fee !== undefined && isSpend(flow) && flow.failure?.code === "fee-changed")) {
+    if (!(flow && flow.status === "failed" && fee !== undefined && (isSpend(flow) || flow.kind === "claim") && flow.failure?.code === "fee-changed")) {
       throw new LochError("INVALID_ARGUMENT", "there is nothing to try again");
     }
   }
   if (fee !== undefined) {
-    if (!isSpend(flow)) throw new LochError("INVALID_ARGUMENT", "this action has no relayer fee");
+    if (!isSpend(flow) && flow.kind !== "claim") throw new LochError("INVALID_ARGUMENT", "this action has no relayer fee");
     if (fee > BigInt((await core.settings()).maxFeeLamports)) throw new LochError("INVALID_ARGUMENT", "fee:above-limit");
     flow.fee = fee.toString();
   }
@@ -1130,6 +1159,8 @@ export async function resumeFlow(core: Core): Promise<void> {
   } else if (flow.kind === "dive") {
     if (flow.step === "checking" || flow.step === "proving" || flow.step === "screening" || flow.step === "signing") flow.step = "checking";
     // sending: the same signed bytes are sent again. confirming: polling goes on.
+  } else if (flow.kind === "claim") {
+    if (!(await resumeClaim(core, flow))) return;
   } else if (flow.step === "checking" || flow.step === "proving") {
     flow.step = "checking";
   } else if (flow.step === "sending") {

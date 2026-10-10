@@ -47,3 +47,8 @@ export const DEFAULTS = {
   /** The most this wallet agrees to pay a relayer for one transaction, unless the user changes it. */
   maxFeeLamports: "5000000",
 } as const;
+
+/** Where a claim link points: the code follows the "#", which a browser never sends to the server. */
+export const CLAIM_PAGE = "https://lochlayer.com/claim";
+/** Where a receipt or a source-of-funds report can be checked by whoever is given one. */
+export const VERIFY_PAGE = "lochlayer.com/verify";

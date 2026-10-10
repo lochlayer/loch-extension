@@ -19,6 +19,10 @@
       "types": "./dist/wire.d.ts",
       "default": "./dist/wire.js"
     },
+    "./verify": {
+      "types": "./dist/verify.d.ts",
+      "default": "./dist/verify.js"
+    },
     "./node": {
       "types": "./dist/node.d.ts",
       "default": "./dist/node.js"

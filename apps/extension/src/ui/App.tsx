@@ -26,6 +26,7 @@ const ACTIVITY_ICON: Record<ActivityEntry["kind"], IconName> = {
   surface: "surface",
   consolidate: "shielded",
   restored: "shielded",
+  claim: "receive",
 };
 
 const CLUSTER_NAME = { devnet: "Devnet", testnet: "Testnet", localnet: "Localnet", "mainnet-beta": "Mainnet" } as const;

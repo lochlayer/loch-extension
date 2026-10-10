@@ -66,8 +66,8 @@ export function decodeShieldedAddress(text: string): ShieldedAddress {
   return addressOf(decodePayload(text, ADDRESS_FORM), ADDRESS_FORM.what);
 }
 
-/** What tells a shielded address and a payment code apart: prefix, payload length, and the name used in messages. */
-interface Form {
+/** What tells the protocol's bech32m strings apart: prefix, payload length, and the name used in messages. */
+export interface Form {
   prefix: string;
   payloadLength: number;
   what: string;
@@ -81,8 +81,12 @@ function prefixOf(text: string): string | null {
   return separator < 1 ? null : text.slice(0, separator).toLowerCase();
 }
 
-/** Checks case, prefix, characters, checksum and length, and returns the payload. */
-function decodePayload(text: string, form: Form): Uint8Array {
+/**
+ * Checks case, prefix, characters, checksum and length, and returns the
+ * payload. Internal: shared with the other bech32m strings of the protocol
+ * (claim codes, viewing keys), which report failures the same way.
+ */
+export function decodePayload(text: string, form: Form): Uint8Array {
   const { what } = form;
   if (typeof text !== "string") throw new AddressError("encoding", `a ${what} is a string`);
   const lower = text.toLowerCase();

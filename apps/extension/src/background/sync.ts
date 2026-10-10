@@ -41,7 +41,7 @@ export function stopSync(core: Core, address: string): void {
 
 /** The activity entry of a spend that landed without one having been written. */
 function entryFor(spend: PendingSpend, at: number): ActivityEntry | null {
-  if (!spend.entry || spend.kind === "unlock") return null;
+  if (!spend.entry || spend.kind === "unlock" || spend.kind === "claim") return null;
   return {
     id: spend.flowId,
     kind: spend.kind,
@@ -50,6 +50,7 @@ function entryFor(spend: PendingSpend, at: number): ActivityEntry | null {
     amount: spend.entry.amount,
     ...(spend.entry.fee !== undefined ? { fee: spend.entry.fee } : {}),
     ...(spend.entry.counterparty !== undefined ? { counterparty: spend.entry.counterparty } : {}),
+    ...(spend.entry.claim ? { claim: true as const } : {}),
   };
 }
 

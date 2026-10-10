@@ -39,6 +39,8 @@ export interface PendingEntry {
   amount: string;
   fee?: string;
   counterparty?: string;
+  /** A send to a claim link. */
+  claim?: true;
 }
 
 export interface PendingSpend {

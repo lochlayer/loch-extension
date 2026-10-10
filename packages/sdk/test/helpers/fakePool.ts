@@ -366,8 +366,11 @@ export class FakePool {
     return {
       getSignaturesForAddress: async (address: PublicKey, options: { before?: string; until?: string; limit?: number } = {}) => {
         this.count("getSignaturesForAddress");
-        if (!address.equals(treePda(this.programId))) return [];
-        let newestFirst = [...this.transactions].reverse();
+        // The history of an address is every transaction that names it. The tree is named by all of them.
+        const named = address.equals(treePda(this.programId))
+          ? this.transactions
+          : this.transactions.filter((tx) => tx.message.staticAccountKeys.some((key) => key.equals(address)));
+        let newestFirst = [...named].reverse();
         if (options.before) {
           const at = newestFirst.findIndex((tx) => tx.signature === options.before);
           newestFirst = at < 0 ? [] : newestFirst.slice(at + 1);

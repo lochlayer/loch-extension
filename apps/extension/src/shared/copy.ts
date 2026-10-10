@@ -51,6 +51,7 @@ export const ACTION_NAME: Record<FlowKind, string> = {
   send: "Send privately",
   surface: "Surface",
   consolidate: "Combine notes",
+  claim: "Collect",
 };
 
 export const ACTION_RUNNING: Record<FlowKind, string> = {
@@ -59,6 +60,7 @@ export const ACTION_RUNNING: Record<FlowKind, string> = {
   send: "Sending privately",
   surface: "Surfacing",
   consolidate: "Combining notes",
+  claim: "Collecting",
 };
 
 const ACTION_BUSY: Record<FlowKind, string> = {
@@ -67,6 +69,7 @@ const ACTION_BUSY: Record<FlowKind, string> = {
   send: "Sending",
   surface: "Surfacing",
   consolidate: "Combining",
+  claim: "Collecting",
 };
 
 export function busyLabel(kind: FlowKind, firstTime = false): string {
@@ -79,6 +82,7 @@ export const OBSERVER: Record<Exclude<FlowKind, "unlock">, string> = {
   send: "a proof and the relayer’s fee. No sender, no recipient, no amount.",
   surface: "the destination, the amount, and that it came out of the Loch. Not which deposit paid for it.",
   consolidate: "a proof and the relayer’s fee. No sender, no recipient, no amount.",
+  claim: "a proof and the relayer’s fee. No sender, no recipient, no amount.",
 };
 
 // -------------------------------------------------------------------- stages
@@ -104,9 +108,11 @@ const STAGES: Record<FlowKind, { steps: string[]; now: string; done: string }[]>
   ],
   surface: [],
   consolidate: [],
+  claim: [],
 };
 STAGES.surface = STAGES.send;
 STAGES.consolidate = STAGES.send;
+STAGES.claim = STAGES.send;
 
 export interface StageLine {
   stages: StageView[];
@@ -173,6 +179,20 @@ export function statusSentence(flow: Pick<FlowView, "kind" | "step" | "walletNam
         return "Dived in.";
     }
   }
+  if (flow.kind === "claim") {
+    switch (flow.step) {
+      case "checking":
+        return "Checking the network, the relayer and that the payment is still there.";
+      case "proving":
+        return "Generating the proof on this device. It takes a few seconds.";
+      case "sending":
+        return "The relayer has the request. It answers once it has seen the transaction confirmed.";
+      case "confirming":
+        return "The relayer says it is sent. Looking for it on the chain.";
+      default:
+        return "Collected.";
+    }
+  }
   switch (flow.step) {
     case "checking":
       return "Checking the network, the relayer and your notes.";
@@ -188,7 +208,7 @@ export function statusSentence(flow: Pick<FlowView, "kind" | "step" | "walletNam
 }
 
 /** The toast when a flow has finished. The action keeps its name. */
-export function doneSentence(flow: Pick<FlowView, "kind" | "amount" | "to">): string {
+export function doneSentence(flow: Pick<FlowView, "kind" | "amount" | "to" | "claim" | "fee">): string {
   const amount = flow.amount ? displaySol(BigInt(flow.amount)) : "";
   switch (flow.kind) {
     case "unlock":
@@ -196,11 +216,14 @@ export function doneSentence(flow: Pick<FlowView, "kind" | "amount" | "to">): st
     case "dive":
       return `Dived in. ${amount} SOL is in the Loch.`;
     case "send":
+      if (flow.claim) return "Paid. The claim link is in the activity list: open the payment to copy it.";
       return `Sent privately. ${amount} SOL is on its way to ${shortAddress(flow.to ?? "")}.`;
     case "surface":
       return `Surfaced. ${amount} SOL went to ${shortAddress(flow.to ?? "")}.`;
     case "consolidate":
       return "Notes combined. You can send larger amounts in one transfer now.";
+    case "claim":
+      return `Collected. ${flow.amount && flow.fee ? `${displaySol(BigInt(flow.amount) - BigInt(flow.fee))} SOL` : "The payment"} is in the Loch.`;
   }
 }
 
@@ -235,7 +258,9 @@ const hid = (lamports: string | undefined, exact = true): string => shd(figure(l
 export function failureCopy(failure: Failure, context: FailureContext): FailureCopy {
   const wallet = context.walletName ?? "the wallet";
   const kept = context.proofKept ? " The proof is kept, so it will not take as long." : "";
-  const spend = context.kind !== "dive" && context.kind !== "unlock";
+  const collect = context.kind === "claim";
+  // Collecting spends the link's note and nothing of this wallet's own: no notes are reserved.
+  const spend = context.kind !== "dive" && context.kind !== "unlock" && !collect;
   // A spend whose request is, or may be, with a relayer. A proof stays valid until its root
   // leaves the pool's root history, whatever the relayer answered, so nothing here may say
   // "nothing was sent": what is known is what the relayer says and what the chain shows.
@@ -244,7 +269,8 @@ export function failureCopy(failure: Failure, context: FailureContext): FailureC
   const earlier = "An earlier attempt of this payment is with a relayer and could still land. Its notes stay reserved until the chain shows what happened or its proof is too old to be accepted.";
   const once = "Trying again spends the same notes, so it cannot be paid twice.";
   const claim = "The relayer says it did not send it, and the chain does not show it. It has the request, though, and could send it later.";
-  const nothing = open ? earlier : spend ? "Nothing was sent." : context.kind === "dive" ? "Nothing moved. Your public balance is unchanged." : "Nothing was signed and nothing moved.";
+  const uncollected = failure.moved === "unknown" ? "The chain does not show the payment collected so far. A request is with a relayer and may still land." : "Nothing was collected. The payment is where it was.";
+  const nothing = open ? earlier : spend ? "Nothing was sent." : collect ? uncollected : context.kind === "dive" ? "Nothing moved. Your public balance is unchanged." : "Nothing was signed and nothing moved.";
   const still = !open && spend && context.shielded !== undefined ? `Nothing was sent. Your shielded balance is still ${hid(context.shielded, false)} SOL.` : nothing;
 
   switch (failure.code) {
@@ -558,17 +584,47 @@ export function failureCopy(failure: Failure, context: FailureContext): FailureC
         lines: [`Loch must be up to date before it proves. ${nothing}`, "Check the RPC endpoint in settings, then try again."],
         settings: true,
       };
+    case "claim-missing":
+      return {
+        title: "The pool does not show this payment",
+        lines: [
+          "The code is well formed, and the pool this wallet reads has no such payment. It may not have landed yet, or the link is for another network.",
+          "Nothing was collected. Try again in a moment, or ask whoever sent the link.",
+        ],
+        settings: false,
+      };
+    case "claim-taken":
+      return failure.moved === "unknown"
+        ? {
+            title: "The relayer says it is already collected",
+            lines: ["Either an earlier attempt of yours is landing, or somebody else collected it first.", "Try again: Loch looks at the chain and tells you which."],
+            settings: false,
+          }
+        : {
+            title: "This payment was already collected",
+            lines: [
+              "The chain shows it was collected: by another device of yours, by whoever sent it taking it back, or by someone else who saw the link.",
+              "Nothing was collected here. A claim link is like cash: whoever has it first has the money.",
+            ],
+            settings: false,
+          };
+    case "claim-too-small":
+      return {
+        title: "The payment does not cover the fee",
+        lines: [`The link holds ${hid(failure.amount)} SOL and the relayer asks ${sol(failure.limit)} SOL to collect it.`, "Nothing was collected. Choose another relayer in settings, or leave it."],
+        settings: true,
+      };
   }
 }
 
 // ------------------------------------------------------------------ activity
 
-export function activityTitle(entry: Pick<ActivityEntry, "kind">): string {
+export function activityTitle(entry: Pick<ActivityEntry, "kind" | "claim">): string {
   switch (entry.kind) {
     case "dive":
       return "Dived in";
     case "send":
-      return "Sent privately";
+      return entry.claim ? "Paid to a claim link" : "Sent privately";
     case "receive":
       return "Received privately";
     case "surface":
@@ -577,6 +633,8 @@ export function activityTitle(entry: Pick<ActivityEntry, "kind">): string {
       return "Combined notes";
     case "restored":
       return "Found in the Loch";
+    case "claim":
+      return "Collected a claim link";
   }
 }
 
@@ -592,6 +650,7 @@ export function activityDelta(entry: Pick<ActivityEntry, "kind" | "amount" | "fe
     case "dive":
     case "receive":
     case "restored":
+    case "claim":
       return amount;
     case "consolidate":
       return -BigInt(entry.fee ?? "0");
@@ -629,6 +688,8 @@ export function activityObserver(entry: Pick<ActivityEntry, "kind" | "counterpar
       return "An observer sees a proof and the relayer’s fee. Not that both notes were yours.";
     case "restored":
       return "These notes were already in the Loch when this device first looked. An observer sees the transactions that made them, not that they are yours.";
+    case "claim":
+      return "An observer sees a proof and the relayer’s fee. Nothing in it points to you or to whoever paid.";
   }
 }
 

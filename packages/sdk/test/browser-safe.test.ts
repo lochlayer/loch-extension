@@ -76,8 +76,17 @@ describe("sources", () => {
       "poseidon-lite/poseidon3",
       "snarkjs",
     ]);
-    // Everything except the filesystem helper is part of the main entry point.
-    expect(files.filter((file) => !reached.includes(file))).toEqual(["node.ts", "snarkjs.d.ts"]);
+    // Everything except the filesystem helper and the checking-only entry point is part of the main entry point.
+    expect(files.filter((file) => !reached.includes(file))).toEqual(["node.ts", "snarkjs.d.ts", "verify.ts"]);
+  });
+
+  it("the verify entry point imports no Node module, no prover and nothing that builds a transaction", () => {
+    const { files: reached, packages } = reach("verify.ts");
+    expect(packages.filter(isNodeBuiltin)).toEqual([]);
+    expect(packages).not.toContain("snarkjs");
+    for (const heavy of ["prover.ts", "snarkjsShim.ts", "transact.ts", "node.ts", "wire.ts"]) {
+      expect(reached, heavy).not.toContain(heavy);
+    }
   });
 
   it("the wire entry point imports no Node module, no prover and no Poseidon", () => {

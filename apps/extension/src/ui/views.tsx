@@ -8,11 +8,13 @@ import { useEffect, useRef, useState } from "preact/hooks";
 
 import { exactSol, inputSol, parseAmountInput } from "../shared/amounts.js";
 import { mainnetTestingEnabled } from "../shared/build.js";
+import { CLAIM_PAGE, VERIFY_PAGE } from "../shared/constants.js";
 import { activityObserver, activityStatusText, isPublicActivity, shortAddress, verdict, whenText } from "../shared/copy.js";
-import type { ActivityEntry, PaymentCodeReply, Snapshot } from "../shared/view.js";
+import { activityCsv } from "../shared/export.js";
+import type { ActivityEntry, ClaimCheck, ClaimCodeReply, PaymentCodeReply, ReceiptReply, Snapshot, SourceReportReply, ViewingKeyReply } from "../shared/view.js";
 import type { Api } from "./api.js";
 import { ActivityRow } from "./App.js";
-import { connectPlace } from "./flows.js";
+import { connectPlace, useQuote } from "./flows.js";
 import { Amount, Field, Icon, ViewHead } from "./parts.js";
 
 type ToastFn = (text: string, kind?: "done" | "caution" | "plain") => void;
@@ -24,6 +26,83 @@ interface ViewProps {
 }
 
 // --------------------------------------------------------------------- activity
+
+/**
+ * What can be taken out of the wallet about one confirmed entry, to show someone: a receipt for
+ * a payment, the link of a payment made to a claim link, a source-of-funds report for a
+ * withdrawal. Each is made when its button is pressed and goes to the clipboard, nowhere else.
+ */
+function ActivityProof({ entry, api, toast }: { entry: ActivityEntry; api: Api; toast: ToastFn }) {
+  const [report, setReport] = useState<SourceReportReply | null>(null);
+  if (!entry.record) return null;
+  const copied = (ok: boolean, what: string) => toast(ok ? `${what} copied.` : "Could not copy. Try again from the expanded view.", ok ? "done" : "caution");
+  const unavailable = () => toast("This device has no record of that transaction any more.", "caution");
+
+  if (entry.kind === "send" && entry.claim) {
+    const link = async () => {
+      const reply = await api.call<ClaimCodeReply>({ loch: "ui", type: "claim-code", id: entry.id });
+      if (!reply.ok) return unavailable();
+      copied(await api.copy(`${CLAIM_PAGE}#${reply.value.code}`), "Claim link");
+    };
+    return (
+      <div class="activity__proof">
+        <button class="btn btn--secondary btn--sm" type="button" onClick={() => void link()}>
+          <Icon name="copy" small />
+          Copy the claim link
+        </button>
+        <p class="t-fine">
+          The link is the money: whoever opens it first collects it. Send it privately, to one person. To take the payment back while nobody has collected it, paste the link under Receive and collect it yourself.
+        </p>
+      </div>
+    );
+  }
+  if (entry.kind === "send") {
+    const receipt = async () => {
+      const reply = await api.call<ReceiptReply>({ loch: "ui", type: "receipt", id: entry.id });
+      if (!reply.ok) return unavailable();
+      copied(await api.copy(reply.value.receipt), "Receipt");
+    };
+    return (
+      <div class="activity__proof">
+        <button class="btn btn--secondary btn--sm" type="button" onClick={() => void receipt()}>
+          <Icon name="copy" small />
+          Copy a receipt
+        </button>
+        <p class="t-fine">
+          A receipt shows whoever you give it to that this transaction paid this amount to this address, and nothing else about your wallet. They check it at {VERIFY_PAGE}.
+        </p>
+      </div>
+    );
+  }
+  if (entry.kind === "surface") {
+    const make = async () => {
+      const reply = await api.call<SourceReportReply>({ loch: "ui", type: "source-report", id: entry.id });
+      if (!reply.ok) return unavailable();
+      setReport(reply.value);
+      copied(await api.copy(reply.value.report), "Report");
+    };
+    return (
+      <div class="activity__proof">
+        <button class="btn btn--secondary btn--sm" type="button" onClick={() => void make()}>
+          <Icon name="copy" small />
+          Copy a source-of-funds report
+        </button>
+        {report && (
+          <p class="t-small" role="status">
+            It opens {report.transactions} of your transactions.{" "}
+            {report.undisclosed === 0
+              ? "Every path in it ends at a deposit."
+              : `${report.undisclosed} ${report.undisclosed === 1 ? "note in it is" : "notes in it are"} not traced further: received from someone else, or made before this device kept records.`}
+          </p>
+        )}
+        <p class="t-fine">
+          For an exchange or anyone else who asks where a withdrawal came from. It shows them the path from this withdrawal back to the deposits behind it, with the amounts of your notes on that path. Give it only to who should see that. They check it at {VERIFY_PAGE}.
+        </p>
+      </div>
+    );
+  }
+  return null;
+}
 
 function ActivityDetail({ entry, api, toast }: { entry: ActivityEntry; api: Api; toast: ToastFn }) {
   const status = activityStatusText(entry);
@@ -83,6 +162,7 @@ function ActivityDetail({ entry, api, toast }: { entry: ActivityEntry; api: Api;
           </div>
         )}
       </dl>
+      <ActivityProof entry={entry} api={api} toast={toast} />
     </div>
   );
 }
@@ -124,6 +204,20 @@ export function ActivityView({ snapshot, api, onClose, toast }: ViewProps & { to
         <span class="is-shielded">Italic is shielded.</span>
       </p>
       <p class="t-fine">This list is kept on this device, encrypted. The chain cannot give it back: a sender cannot read the notes it sent.</p>
+      {snapshot.activity.length > 0 && (
+        <p>
+          <button
+            class="btn btn--secondary btn--sm"
+            type="button"
+            onClick={() => {
+              const ok = api.save(`loch-activity-${new Date(api.now()).toISOString().slice(0, 10)}.csv`, activityCsv(snapshot.activity), "text/csv");
+              toast(ok ? "Saved as a CSV file. It is not encrypted: it lists your shielded payments in plain text." : "The browser would not save the file.", ok ? "done" : "caution");
+            }}
+          >
+            Export as CSV
+          </button>
+        </p>
+      )}
     </>
   );
 }
@@ -167,9 +261,158 @@ export function ReceiveBlock({ snapshot, api, toast, compact }: { snapshot: Snap
             <span>The address is the same every time: two people who compare the addresses they pay can tell it is one person.</span>
           </p>
           <PaymentCodeBlock api={api} toast={toast} />
+          <CollectBlock api={api} snapshot={snapshot} />
         </>
       )}
     </div>
+  );
+}
+
+const CLAIM_PROBLEM: Record<Exclude<ClaimCheck, { ok: true }>["reason"], string> = {
+  empty: "Paste the link.",
+  "not-a-code": "This is not a claim link. One ends in a code that starts with lochclaim1.",
+  checksum: "There is an error in it: its checksum does not match. Copy the link again.",
+};
+
+/**
+ * Collecting a claim link: the payment someone made to a link is moved into this wallet's
+ * shielded balance. Once started it is a flow like the others, and its sheet takes over.
+ */
+function CollectBlock({ api, snapshot }: { api: Api; snapshot: Snapshot }) {
+  const [text, setText] = useState("");
+  const [check, setCheck] = useState<ClaimCheck | null>(null);
+  const [failed, setFailed] = useState(false);
+  const { quote } = useQuote(api, "spend");
+  useEffect(() => {
+    if (text.trim() === "") {
+      setCheck(null);
+      return;
+    }
+    let live = true;
+    void api.call<ClaimCheck>({ loch: "ui", type: "claim-check", code: text }).then((reply) => {
+      if (live && reply.ok) setCheck(reply.value);
+    });
+    return () => {
+      live = false;
+    };
+  }, [api, text]);
+  const fee = quote?.relayer ? BigInt(quote.relayer.fee) : null;
+  const amount = check?.ok ? BigInt(check.amount) : null;
+  const tooSmall = amount !== null && fee !== null && amount <= fee;
+  const aboveLimit = fee !== null && fee > BigInt(snapshot.settings.maxFeeLamports);
+  const ready = amount !== null && fee !== null && !tooSmall && !aboveLimit;
+  const collect = async () => {
+    if (!ready || fee === null) return;
+    setFailed(false);
+    const reply = await api.call({ loch: "ui", type: "claim", code: text, fee: fee.toString() });
+    if (reply.ok) setText("");
+    else setFailed(true);
+  };
+  const error = check && !check.ok ? CLAIM_PROBLEM[check.reason] : tooSmall ? "The link holds less than the relayer’s fee for collecting it." : aboveLimit ? "The relayer’s fee is above your limit. Raise it or choose another relayer in settings." : failed ? "Loch could not start this. Finish what is in progress and try again." : null;
+  return (
+    <section class="receive__code" aria-labelledby="collect-title">
+      <h3 class="t-label" id="collect-title">
+        A claim link, from someone who paid you
+      </h3>
+      <p class="t-small">Paste the link they sent. The payment in it moves to your shielded balance; the relayer&rsquo;s fee comes out of it.</p>
+      <Field label="Claim link" id="collect-link" error={error}>
+        <textarea
+          class="input"
+          id="collect-link"
+          rows={3}
+          spellcheck={false}
+          autocomplete="off"
+          autocapitalize="off"
+          placeholder="https://lochlayer.com/claim#lochclaim1…"
+          value={text}
+          aria-invalid={error ? "true" : undefined}
+          onInput={(event) => setText(event.currentTarget.value.replace(/\s+/g, ""))}
+        />
+      </Field>
+      {amount !== null && (
+        <dl class="deflist deflist--kv">
+          <div class="deflist__row">
+            <dt>In the link</dt>
+            <dd>
+              <Amount lamports={amount} shielded exact /> SOL
+            </dd>
+          </div>
+          <div class="deflist__row">
+            <dt>Relayer fee</dt>
+            <dd>{fee !== null ? <Amount lamports={fee} exact /> : <span class="t-quiet">{quote === null ? "Asking the relayer" : "Not known"}</span>}{fee !== null && " SOL"}</dd>
+          </div>
+          {fee !== null && amount > fee && (
+            <div class="deflist__row">
+              <dt>Arrives in your shielded balance</dt>
+              <dd>
+                <Amount lamports={amount - fee} shielded exact /> SOL
+              </dd>
+            </div>
+          )}
+        </dl>
+      )}
+      {check?.ok && check.own && (
+        <p class="notice notice--inline">
+          <Icon name="info" />
+          <span>You made this link. Collecting it takes the payment back, less one relayer fee.</span>
+        </p>
+      )}
+      <div class="receive__actions">
+        <button class="btn btn--primary" type="button" aria-disabled={ready ? undefined : "true"} onClick={() => void collect()}>
+          {check?.ok && check.own ? "Take it back" : "Collect"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The viewing key: shown only when asked for, with what it gives away said first. Nothing is
+ * kept here: closing the view forgets it.
+ */
+function ViewingKeySection({ api, toast, unlocked }: { api: Api; toast: ToastFn; unlocked: boolean }) {
+  const [key, setKey] = useState<string | null>(null);
+  const show = async () => {
+    const reply = await api.call<ViewingKeyReply>({ loch: "ui", type: "viewing-key" });
+    if (reply.ok) setKey(reply.value.key);
+    else toast("Unlock the wallet to see its viewing key.", "caution");
+  };
+  return (
+    <section class="settings__section" aria-labelledby="set-viewing">
+      <h3 class="settings__title" id="set-viewing">
+        Viewing key
+      </h3>
+      <p class="t-small">
+        For an accountant or an auditor. Whoever holds it sees every payment this wallet receives, with its amount: payments from others, your own deposits and your change, past and future. They cannot spend, and they cannot see which notes you have spent, so not your balance or what you paid out.
+      </p>
+      <p class="notice notice--inline">
+        <Icon name="caution" />
+        <span>It cannot be taken back. Once someone has it, they can read what this wallet receives for as long as the wallet exists. For one payment, give a receipt instead.</span>
+      </p>
+      {key && (
+        <p class="address-full is-shielded receive__address" aria-label="Your viewing key">
+          {groupAddress(key)}
+        </p>
+      )}
+      <div class="cluster">
+        {key ? (
+          <>
+            <button class="btn btn--secondary btn--sm" type="button" onClick={() => void api.copy(key).then((ok) => toast(ok ? "Viewing key copied." : "Could not copy. Select the key instead.", ok ? "done" : "caution"))}>
+              <Icon name="copy" small />
+              Copy viewing key
+            </button>
+            <button class="btn btn--quiet btn--sm" type="button" onClick={() => setKey(null)}>
+              Hide
+            </button>
+          </>
+        ) : (
+          <button class="btn btn--secondary btn--sm" type="button" disabled={!unlocked} onClick={() => void show()}>
+            Show viewing key
+          </button>
+        )}
+      </div>
+      <p class="t-fine">They read it at {VERIFY_PAGE}, or with the SDK.</p>
+    </section>
   );
 }
 
@@ -810,6 +1053,8 @@ export function SettingsView({ snapshot, api, onClose, toast }: ViewProps & { to
           )}
         </section>
       )}
+
+      {active && <ViewingKeySection api={api} toast={toast} unlocked={active.unlocked} />}
 
       <section class="settings__section" aria-labelledby="set-about">
         <h3 class="settings__title" id="set-about">

@@ -11,6 +11,7 @@ import { type ExtData, type Groth16Proof, type TransactArgs, encodeProof, encode
 import { PROGRAM_ID, SYSTEM_ACCOUNT_RENT_EXEMPT_MINIMUM, TREE_DEPTH } from "./constants.js";
 import { FeeTooHighError, InsufficientBalanceError, LochError } from "./errors.js";
 import { assertAmount, assertField, fieldToBytes, publicAmountField } from "./field.js";
+import { type InputOpening, openInput } from "./disclosure.js";
 import { buildTransactInstruction } from "./instruction.js";
 import { type LochKeys, publicKeyOf } from "./keys.js";
 import { type MerkleTree, merkleRootFromPath } from "./merkle.js";
@@ -121,6 +122,13 @@ export interface PreparedTransact {
   proof: Groth16Proof;
   /** The public signals in snarkjs form (decimal strings, circuit order). */
   publicSignals: string[];
+  /**
+   * The two input notes opened, in transaction order, dummies included: what
+   * a source-of-funds report discloses about this transaction
+   * (`disclosure.ts`). Secret until the wallet chooses to disclose it, and not
+   * recoverable later: nothing on chain gives a dummy's opening back.
+   */
+  inputs: [InputOpening, InputOpening];
 }
 
 /** A prepared transfer, withdrawal or consolidation. */
@@ -313,6 +321,7 @@ export async function prepareTransact(params: PrepareTransactParams): Promise<Pr
     publicInputs,
     proof,
     publicSignals: publicSignals.map(String),
+    inputs: inputs.map((input) => openInput(input.note, input.leafIndex, input.privateKey)) as [InputOpening, InputOpening],
   };
 }
 
