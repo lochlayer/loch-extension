@@ -72,7 +72,9 @@ The build checks the two prover files against their recorded SHA-256 and stops i
 
 ## Token
 
-The $LOCH token is not live yet. When it is, its address will be `CYGidBuS8WwUXfZCmb98LnLGL9Mx8SvhdqA6t3xTLoch`. Nothing is deployed there today and nothing is for sale. A token at any other address is not ours.
+$LOCH token address: `CYGidBuS8WwUXfZCmb98LnLGL9Mx8SvhdqA6t3xTLoch`
+
+A token at any other address is not ours.
 
 ## Licence
 
