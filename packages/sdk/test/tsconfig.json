@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "WebWorker"],
+    "types": ["node"],
+    // The reference implementation in circuits/test/helpers is plain .mjs.
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["./**/*.ts", "../src/**/*.ts", "../vitest.config.ts"],
+  "exclude": []
+}

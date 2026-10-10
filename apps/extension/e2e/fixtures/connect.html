@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="dark" />
+    <title>Loch: connect your wallet</title>
+    <!--
+      The Loch connect page. The Loch extension opens this page to reach your wallet: a wallet
+      extension can only be asked from a web page, never from another extension.
+
+      The page itself does nothing. It has no script of its own, loads nothing from anywhere and
+      stores nothing. The Loch extension's content script, which the browser adds to it, carries
+      each request from the Loch popup to your wallet and the answer back, and writes what is
+      going on into the element marked data-loch-status.
+
+      This copy is for development and tests. The real one is apps/connect: a separate app,
+      built with the design system's own stylesheet and fonts, deployed alone on an origin
+      that serves nothing else (never by the Loch website). It must stay free of scripts, and
+      must not set a Content-Security-Policy that keeps wallet extensions from adding their
+      provider to the page.
+    -->
+    <style>
+      :root {
+        --buff: #e4d8b4;
+        --ink: #0b1820;
+        --water: #0e2532;
+        --deep: #0a1d27;
+        --loch: #a8d0e0;
+        --paper: #e9eef0;
+        --paper-2: #9db3be;
+        --magenta: #9a1f66;
+        --magenta-lit: #e58abb;
+        --rule: rgb(168 208 224 / 0.24);
+      }
+      * { box-sizing: border-box; }
+      html { background: var(--deep); }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--water);
+        color: var(--paper);
+        font: 400 16px/1.55 "Libre Franklin", "Franklin Gothic Medium", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .band { margin: 0; padding: 6px 24px; background: var(--magenta); color: #efe6c9; font-size: 14px; font-weight: 500; }
+      .land { padding: 28px 24px 0; background: var(--buff); color: var(--ink); border-bottom: 2px solid var(--buff); }
+      .name { margin: 0 0 40px; font: italic 400 26px/1 "Old Standard TT", "Iowan Old Style", Palatino, Georgia, serif; }
+      h1 { margin: 0; max-width: 18em; font: 400 clamp(32px, 6vw, 52px)/1.04 "Old Standard TT", "Iowan Old Style", Palatino, Georgia, serif; letter-spacing: -0.012em; }
+      main { max-width: 46rem; padding: 0 24px 64px; }
+      .under { margin: 0 0 32px; padding-top: 0.1em; color: var(--loch); font: italic 400 clamp(32px, 6vw, 52px)/1.04 "Old Standard TT", "Iowan Old Style", Palatino, Georgia, serif; letter-spacing: -0.012em; }
+      p { margin: 0 0 16px; max-width: 34em; }
+      .status { margin: 0 0 32px; padding: 16px 0; border-top: 2px solid var(--buff); border-bottom: 1px solid var(--rule); color: var(--buff); font-weight: 600; }
+      .status:empty::before { content: "Waiting for the Loch extension. Press Connect wallet or Unlock in Loch."; color: var(--paper-2); font-weight: 400; }
+      dl { margin: 32px 0 0; }
+      dt { padding-top: 14px; border-top: 1px solid var(--rule); font-weight: 600; }
+      dd { margin: 0 0 14px; max-width: 34em; color: var(--paper-2); }
+      .caution { color: var(--magenta-lit); }
+    </style>
+  </head>
+  <body>
+    <p class="band"><strong>Devnet.</strong> Loch v0.1 is unaudited. Test SOL only.</p>
+    <header class="land">
+      <p class="name">Loch</p>
+      <h1>Your wallet answers here.</h1>
+    </header>
+    <main>
+      <p class="under">Loch only asks.</p>
+      <p class="status" role="status" aria-live="polite" data-loch-status></p>
+      <p>
+        The Loch extension opened this page because a wallet can only be asked from a web page. Keep it open until Loch says it is done; it closes by itself. Answer your wallet in the
+        wallet&rsquo;s own window.
+      </p>
+      <dl>
+        <dt>What your wallet will ask</dt>
+        <dd>To connect, and then to sign one message: &ldquo;Loch key derivation v1&rdquo;. The first time it asks for that signature twice. When you dive in, it asks you to approve the deposit.</dd>
+        <dt>What the signature is for</dt>
+        <dd>It derives the keys of your shielded balance, on your device. It moves nothing and costs nothing.</dd>
+        <dt class="caution">What to never do</dt>
+        <dd>
+          Never sign &ldquo;Loch key derivation v1&rdquo; on any other website. Whoever has that signature can read and spend your shielded balance. Loch asks for it only on this page, and
+          only after you pressed Connect wallet or Unlock in the Loch extension.
+        </dd>
+        <dt>What this page does</dt>
+        <dd>Nothing by itself. It runs no script, loads nothing from other sites and keeps nothing.</dd>
+      </dl>
+    </main>
+  </body>
+</html>

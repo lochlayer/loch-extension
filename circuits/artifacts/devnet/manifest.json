@@ -1,0 +1,90 @@
+{
+  "name": "loch-transaction",
+  "network": "devnet",
+  "warning": "Single-contributor development setup, not a ceremony. Whoever ran it could forge proofs. Devnet only. Never use with real funds.",
+  "generatedAt": "2026-10-03T08:14:05.409Z",
+  "circuit": {
+    "entry": "circuits/transaction.circom",
+    "main": "Transaction(20, 2, 2)",
+    "curve": "bn128",
+    "protocol": "groth16",
+    "merkleLevels": 20,
+    "inputs": 2,
+    "outputs": 2,
+    "publicSignals": [
+      "root",
+      "publicAmount",
+      "extDataHash",
+      "inputNullifier[0]",
+      "inputNullifier[1]",
+      "outputCommitment[0]",
+      "outputCommitment[1]"
+    ],
+    "sources": {
+      "transaction.circom": {
+        "sha256": "07ffd8918798546c05eeb77982c21cc7e861cadaa1b4f0150e884e42b38965fe"
+      },
+      "lib.circom": {
+        "sha256": "e9adb76d3badf3d6e26a651101ac07a4130d59901c8146241e3f6a60109d08f9"
+      }
+    }
+  },
+  "constraints": {
+    "nonLinear": 12698,
+    "linear": 0,
+    "total": 12698,
+    "wires": 12749,
+    "publicInputs": 7,
+    "publicOutputs": 0,
+    "privateInputs": 54,
+    "labels": 40231
+  },
+  "toolchain": {
+    "circom": "2.2.3",
+    "circomFlags": [
+      "--r1cs",
+      "--wasm",
+      "--sym",
+      "--O2"
+    ],
+    "circomlib": "2.0.5",
+    "snarkjs": "0.7.6",
+    "node": "v22.22.1"
+  },
+  "r1cs": {
+    "sha256": "1221f955fb99d33981a41667cc8024a62892e2515f25c20aeb926f3ad73e1529",
+    "bytes": 5911016,
+    "path": "build/transaction.r1cs",
+    "committed": false
+  },
+  "setup": {
+    "kind": "single-contributor development setup",
+    "contribution": "loch devnet single dev contribution 2026-10-03T08:13:07Z",
+    "ptau": {
+      "file": "powersOfTau28_hez_final_14.ptau",
+      "power": 14,
+      "source": "Hermez perpetual powers of tau: powersOfTau28_hez_final_14.ptau from https://circom.info/powersOfTau28_hez_final_14.ptau, BLAKE2b-512 verified against the hash published in the snarkjs README",
+      "blake2b512": "eeefbcf7c3803b523c94112023c7ff89558f9b8e0cf5d6cdcba3ade60f168af4a181c9c21774b94fbae6c90411995f7d854d02ebd93fb66043dbb06f17a831c1",
+      "sha256": "489be9e5ac65d524f7b1685baac8a183c6e77924fdb73d2b8105e335f277895d",
+      "committed": false
+    }
+  },
+  "files": {
+    "transaction.wasm": {
+      "sha256": "c18d5874492e570ce9d51fa13927eb118ddb7204393403b3a9154c22f4d51ca7",
+      "bytes": 2510600
+    },
+    "transaction_final.zkey": {
+      "sha256": "7116cd68120ddc9e8b025754c82166e1404c2bce67c34df16989650b58596632",
+      "bytes": 7454974
+    },
+    "verification_key.json": {
+      "sha256": "bb797b878b3e62e69ba3ce6214c260410ae43dfd1bea0ee375491ab9d842d0b5",
+      "bytes": 4024
+    }
+  },
+  "verifyingKeyRs": {
+    "path": "programs/loch_pool/src/verifying_key.rs",
+    "sha256": "c02ef638bd549a91f445a6fa3576bfc526e3f76fd7ae21ebffcc6888037f34b6"
+  }
+}

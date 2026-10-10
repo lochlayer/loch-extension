@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="loch-fav-t">
+  <title id="loch-fav-t">Loch</title>
+  <!--
+    The favicon: the small mark. She is larger in the tile and has no eye, and the
+    waterline is two units deep with its top on a pixel edge of the 16px grid.
+    Her tail ends inside the tile, in a tip of its own.
+    Drawn by scripts/draw-mark.mjs from mark/source/nessie.svg. Change it there, not here.
+  -->
+  <defs>
+    <clipPath id="loch-fav-tile"><rect width="64" height="64" rx="8"/></clipPath>
+    <clipPath id="loch-fav-dry"><rect width="64" height="28"/></clipPath>
+    <clipPath id="loch-fav-wet"><rect y="28" width="64" height="36"/></clipPath>
+    <g id="loch-fav-n" fill="currentColor">
+      <path d="M51.5 7.36C52.52 7.23 53.58 7.51 54.45 8.04C55.44 8.65 56.57 9.73 56.84 10.9C57 11.58 56.94 12.29 56.56 12.89C55.81 14.07 54.21 14.48 52.9 14.58C52.41 14.62 51.9 14.58 51.42 14.69C50.88 14.82 50.45 15.13 50.17 15.6C48.52 18.3 50.93 24.71 51.84 27.51C52.22 28.65 52.56 29.8 52.86 30.97C53.73 34.53 53.72 38.14 51.75 41.35C50.02 44.16 47.38 46.02 44.19 46.8C43.54 48.59 42.26 50.1 40.58 51.03C39.41 51.69 38.11 52.07 36.79 52.26C36.48 52.3 36.11 52.38 35.8 52.29C35.63 52.24 35.48 52.12 35.4 51.96C35.03 51.15 35.69 48.35 35.99 47.47C33.15 47.6 31.27 47.42 28.48 46.8C27.43 48.75 25.72 50.07 23.62 50.77C22.72 51.01 21.34 51.45 20.44 51.2C20 51.08 20.08 50.1 20.1 49.72C20.2 48.02 20.62 46.4 21.49 44.92C21.27 44.97 21.17 45.01 20.97 45.09C20.54 45.3 19.83 45.83 19.39 46.1C18.08 46.87 16.67 47.46 15.2 47.82C12.81 48.39 10.44 48.35 8.06 47.72C7.64 47.61 7.1 47.54 7.04 47C7 46.74 7.12 46.49 7.34 46.35C7.57 46.21 8.97 46.05 9.4 45.95C10.12 45.79 10.83 45.58 11.52 45.32C14.86 44.05 17.26 41.72 19.47 38.99C20.53 37.68 21.69 36.54 23.06 35.55C27.81 32.06 34.08 31.39 39.47 33.81C40.15 34.11 40.8 34.46 41.44 34.86C42.5 35.52 43.84 36.8 45.18 36.65C45.59 36.6 45.92 36.39 46.17 36.07C47.69 34.07 46.37 28.07 45.96 25.73C45.72 24.42 45.52 23.11 45.36 21.79C44.91 17.95 44.91 12.84 47.4 9.61C48.42 8.3 49.85 7.54 51.5 7.36z"/>
+    </g>
+  </defs>
+  <g clip-path="url(#loch-fav-tile)">
+    <rect width="64" height="28" fill="#0A1420"/>
+    <rect y="28" width="64" height="36" fill="#17394A"/>
+    <use href="#loch-fav-n" color="#E4D8B4" clip-path="url(#loch-fav-dry)"/>
+    <use href="#loch-fav-n" color="#A8D0E0" clip-path="url(#loch-fav-wet)"/>
+    <rect y="27" width="64" height="2" fill="#E4D8B4"/>
+  </g>
+  <rect x=".5" y=".5" width="63" height="63" rx="7.5" fill="none" stroke="#E4D8B4" stroke-opacity=".22"/>
+</svg>

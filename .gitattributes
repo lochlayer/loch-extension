@@ -1,0 +1,4 @@
+*.zkey binary
+*.wasm binary
+*.woff2 binary
+*.png binary

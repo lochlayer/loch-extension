@@ -1,0 +1,36 @@
+Copyright (c) 2026 Loch (lochlayer.com). All rights reserved.
+
+This source code is published so that it can be read, reviewed for security,
+and checked against the released builds of the Loch browser extension.
+
+Permission is granted to any person to:
+
+  1. view and read this source code;
+  2. download it and build it, unmodified, for the sole purpose of personal
+     use of the Loch extension or of verifying that a released build
+     corresponds to this source code.
+
+No other rights are granted. In particular, without prior written permission
+from the copyright holder, you may not:
+
+  - copy, reproduce or redistribute this source code or builds made from it,
+    in whole or in part;
+  - modify it, or create or distribute derivative works;
+  - use it, or any part of it, in another product or service;
+  - use the name "Loch", the mascot, the marks or the artwork in this
+    repository.
+
+Third-party components keep their own licences. This includes the fonts in
+packages/design/fonts (SIL Open Font License 1.1; see the OFL-*.txt files
+there) and the dependencies named in the package.json files, each under the
+licence its own package states. Nothing in this notice restricts rights you
+have under those licences.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+To ask for permission: https://github.com/lochlayer

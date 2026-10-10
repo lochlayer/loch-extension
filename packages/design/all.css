@@ -1,0 +1,5 @@
+/* @loch/design / all.css: everything, in the order it must load. */
+@import "./tokens.css";
+@import "./fonts.css";
+@import "./base.css";
+@import "./components.css";

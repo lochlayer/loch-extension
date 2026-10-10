@@ -1,0 +1,3225 @@
+/*
+  @loch/design / components.css
+
+  Every component the website and the extension need. Components read only
+  the ground roles and the density roles from tokens.css, so the same markup
+  works on land and in water, in dusk and at night, comfortable and compact.
+
+  House rules that hold for every component here:
+    - flat fills, hairline rules, no shadows, no gradients, no cards
+    - structure is square; controls have a 2px corner
+    - magenta appears only where there is a caution
+    - nothing moves unless the user did something
+
+  Contents
+    01 icon, sprite         13 band, section head,  25 sheet, dialog
+    02 button                  page head            26 toast
+    03 field, input         14 definition rows      27 progress, working
+    04 input group          15 data table           28 skeleton, unsurveyed,
+    05 amount               16 activity                empty, failure
+    06 select               17 balance              29 masthead
+    07 checkbox, toggle     18 score                30 footer
+    08 caution band         19 severity, flag       31 code
+    09 notice, status,      20 statement (findings) 32 steps, observer, legend
+       reasons              21 charts, fit          33 popup frame
+    10 waterline            22 report               34 link
+    11 hero, mirror         23 address chip         35 disclosure
+    12 contour              24 tabs, segmented      36 pick list
+*/
+
+@layer loch.tokens, loch.reset, loch.base, loch.components, loch.utilities;
+
+@layer loch.components {
+  /* ======================================================== 01 icon, sprite */
+
+  /* 20px grid, 1.5px stroke, round caps and joins, currentColor. */
+  .icon {
+    flex: none;
+    width: var(--icon);
+    height: var(--icon);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    overflow: visible;
+  }
+  .icon--sm {
+    width: 1rem;
+    height: 1rem;
+  }
+  .icon--lg {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+
+  /*
+    The sprite, inlined once per document (SPRITE from @loch/design/icons, or
+    the contents of icons/sprite.svg). It is <svg class="sprite" width="0"
+    height="0">: this rule takes it out of the flow, so it adds no line and no
+    gap wherever it is put. It carries no style attribute, so a
+    Content-Security-Policy without 'unsafe-inline' lets it in.
+  */
+  .sprite {
+    position: absolute;
+    width: 0;
+    height: 0;
+  }
+
+  /* ============================================================== 02 button */
+
+  /*
+    .btn + one of --primary, --secondary, --quiet.
+    Sizes: --sm, (md), --lg. Shapes: --block, --icon (square, needs aria-label),
+    --stacked (icon over label: the popup's three actions).
+    States: :hover, :active, :focus-visible, :disabled or [aria-disabled="true"],
+    [aria-busy="true"] (working dashes run along the bottom edge).
+  */
+  .btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: var(--control-md);
+    padding: 0 var(--control-x);
+    border: var(--hair) solid transparent;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: var(--text-control);
+    font-weight: var(--weight-strong);
+    line-height: 1.15;
+    text-align: center;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition:
+      background-color var(--dur-1),
+      border-color var(--dur-1),
+      color var(--dur-1);
+  }
+  .btn--sm {
+    min-height: var(--control-sm);
+    padding: 0 var(--space-3);
+    font-size: var(--text-fine);
+  }
+  .btn--lg {
+    min-height: var(--control-lg);
+    padding: 0 var(--space-6);
+  }
+  .btn--block {
+    display: flex;
+    width: 100%;
+  }
+  .btn--icon {
+    width: var(--control-md);
+    padding: 0;
+  }
+  .btn--icon.btn--sm {
+    width: var(--control-sm);
+  }
+  .btn--stacked {
+    flex-direction: column;
+    gap: 0.375rem;
+    min-height: 3.875rem;
+    padding: var(--space-2) var(--space-1);
+    font-size: var(--text-fine);
+    white-space: normal;
+  }
+
+  .btn--primary {
+    background: var(--action);
+    color: var(--on-action);
+  }
+  .btn--primary:hover {
+    background: var(--action-hover);
+  }
+  .btn--primary:active {
+    background: var(--action-active);
+  }
+
+  .btn--secondary {
+    border-color: var(--rule-control);
+  }
+  .btn--secondary:hover {
+    border-color: var(--text);
+    background: var(--wash);
+  }
+  .btn--secondary:active {
+    border-color: var(--text);
+    background: transparent;
+  }
+  .btn--secondary .icon {
+    color: var(--shielded);
+  }
+
+  .btn--quiet:hover {
+    background: var(--wash);
+  }
+  .btn--quiet:active {
+    background: transparent;
+    color: var(--text-2);
+  }
+
+  .btn:disabled,
+  .btn[aria-disabled="true"] {
+    border-color: var(--rule);
+    background: transparent;
+    color: var(--text-disabled);
+    cursor: not-allowed;
+  }
+  .btn:disabled .icon,
+  .btn[aria-disabled="true"] .icon {
+    color: inherit;
+  }
+  .btn--quiet:disabled,
+  .btn--quiet[aria-disabled="true"] {
+    border-color: transparent;
+  }
+
+  .btn[aria-busy="true"] {
+    cursor: progress;
+  }
+  .btn[aria-busy="true"]::after {
+    content: "";
+    position: absolute;
+    inset: auto var(--space-2) 0.3125rem;
+    height: var(--line);
+    background: repeating-linear-gradient(90deg, currentColor 0 9px, transparent 9px 16px);
+    animation: loch-dashes var(--dur-dash) linear infinite;
+  }
+
+  @keyframes loch-dashes {
+    to {
+      background-position-x: 16px;
+    }
+  }
+
+  /* ======================================================= 03 field, input */
+
+  /*
+    <div class="field">
+      <label class="field__label" for="id">Label</label>
+      <input class="input" id="id" aria-describedby="id-hint id-error">
+      <p class="field__hint" id="id-hint">…</p>
+      <p class="field__error" id="id-error">…</p>     only when aria-invalid="true"
+    </div>
+  */
+  .field {
+    display: grid;
+    gap: var(--field-gap);
+    min-width: 0;
+  }
+  .field__label {
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-ui);
+  }
+  .field__label small {
+    font-size: inherit;
+    font-weight: var(--weight-regular);
+    color: var(--text-2);
+  }
+  .field__hint {
+    font-size: var(--text-fine);
+    line-height: 1.45;
+    color: var(--text-2);
+  }
+  .field__error {
+    display: flex;
+    gap: var(--space-2);
+    font-size: var(--text-fine);
+    font-weight: var(--weight-medium);
+    line-height: 1.45;
+    color: var(--caution);
+  }
+  .field__error .icon {
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0.12em;
+  }
+
+  .input {
+    width: 100%;
+    min-width: 0;
+    height: var(--control-md);
+    padding: 0 var(--space-3);
+    border: var(--hair) solid var(--rule-control);
+    border-radius: var(--radius-control);
+    background: var(--field);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: var(--text-control);
+    line-height: 1.2;
+    transition: border-color var(--dur-1);
+  }
+  textarea.input {
+    height: auto;
+    min-height: calc(var(--control-md) * 2);
+    padding-block: var(--space-2);
+    line-height: 1.45;
+    resize: vertical;
+  }
+  .input--lg {
+    height: var(--control-lg);
+    padding: 0 var(--space-4);
+  }
+  .input::placeholder {
+    color: var(--text-2);
+    opacity: 1;
+  }
+  .input:hover {
+    border-color: var(--text);
+  }
+  .input:focus-visible {
+    border-color: var(--text);
+  }
+  .input:disabled {
+    border-color: var(--rule);
+    background: transparent;
+    color: var(--text-disabled);
+    cursor: not-allowed;
+  }
+  .input:disabled::placeholder {
+    color: var(--text-disabled);
+  }
+  .input:read-only:not(select) {
+    border-style: dashed;
+    background: transparent;
+  }
+  .input[aria-invalid="true"] {
+    border-color: var(--caution);
+    box-shadow: inset 0 0 0 1px var(--caution);
+  }
+
+  /* A field and a button on one line; stacks under 35rem. */
+  .field-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  @media (min-width: 35rem) {
+    .field-row {
+      flex-direction: row;
+    }
+    .field-row > .btn {
+      flex: none;
+    }
+  }
+
+  /* ========================================================= 04 input group */
+
+  /*
+    One outline around an input and what belongs to it: a unit, an action.
+    <div class="input-group">
+      <input class="input" …>
+      <span class="input-group__unit">SOL</span>
+      <button class="btn btn--quiet btn--sm">Paste</button>
+    </div>
+    .input-group--address  sets the address in tabular figures.
+  */
+  .input-group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+    padding-right: var(--space-1);
+    border: var(--hair) solid var(--rule-control);
+    border-radius: var(--radius-control);
+    background: var(--field);
+    transition: border-color var(--dur-1);
+  }
+  .input-group > .input {
+    flex: 1;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .input-group > .input:focus-visible {
+    outline: none;
+  }
+  .input-group:hover {
+    border-color: var(--text);
+  }
+  .input-group:focus-within {
+    border-color: var(--text);
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: var(--focus-offset);
+  }
+  .input-group:has(.btn:focus-visible) {
+    outline: none;
+  }
+  .input-group:has(.input[aria-invalid="true"]) {
+    border-color: var(--caution);
+    box-shadow: inset 0 0 0 1px var(--caution);
+  }
+  .input-group:has(.input:disabled) {
+    border-color: var(--rule);
+    background: transparent;
+  }
+  .input-group__unit {
+    flex: none;
+    padding: 0 var(--space-2);
+    font-size: var(--text-fine);
+    font-weight: var(--weight-strong);
+    color: var(--text-2);
+  }
+  .input-group__ok {
+    flex: none;
+    margin-right: var(--space-2);
+    color: var(--public);
+  }
+  .input-group--address > .input {
+    font-family: var(--font-figures);
+    font-size: var(--text-fine);
+    letter-spacing: 0.01em;
+  }
+
+  /* ============================================================== 05 amount */
+
+  /*
+    The amount field. The figure is typed at display size and follows the
+    lettering rule: .amount--public (dive in, surface: the chain sees the
+    amount) is upright; .amount--shielded (send privately) is italic.
+    <div class="field amount amount--shielded">
+      <label class="field__label" for="a">Amount</label>
+      <div class="amount__box">
+        <input class="amount__input" id="a" inputmode="decimal" placeholder="0.000">
+        <span class="amount__unit">SOL</span>
+        <button class="btn btn--quiet btn--sm" type="button">Max</button>
+      </div>
+      <p class="field__hint">…</p>
+    </div>
+  */
+  .amount__box {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    height: calc(var(--control-lg) + var(--space-3));
+    padding: 0 var(--space-2) 0 var(--space-3);
+    border: var(--hair) solid var(--rule-control);
+    border-radius: var(--radius-control);
+    background: var(--field);
+    transition: border-color var(--dur-1);
+  }
+  .amount__box:hover {
+    border-color: var(--text);
+  }
+  .amount__box:focus-within {
+    border-color: var(--text);
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: var(--focus-offset);
+  }
+  .amount__box:has(.btn:focus-visible) {
+    outline: none;
+  }
+  .amount__input {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-family: var(--font-serif);
+    font-size: max(var(--serif-min), var(--text-title-3));
+    font-variant-numeric: lining-nums;
+    line-height: 1;
+    color: var(--public);
+  }
+  .amount__input:focus-visible {
+    outline: none;
+  }
+  .amount__input::placeholder {
+    color: var(--text-disabled);
+    opacity: 1;
+  }
+  .amount--shielded .amount__input {
+    font-style: italic;
+    color: var(--shielded);
+  }
+  .amount__unit {
+    flex: none;
+    font-size: var(--text-fine);
+    font-weight: var(--weight-strong);
+    color: var(--text-2);
+  }
+  .amount:has([aria-invalid="true"]) .amount__box {
+    border-color: var(--caution);
+    box-shadow: inset 0 0 0 1px var(--caution);
+  }
+  .amount:has(.amount__input:disabled) .amount__box {
+    border-color: var(--rule);
+    background: transparent;
+  }
+  .amount__input:disabled {
+    color: var(--text-disabled);
+    cursor: not-allowed;
+  }
+
+  /* ============================================================== 06 select */
+
+  /* <div class="select"><select class="input">…</select></div> */
+  .select {
+    position: relative;
+    display: block;
+    min-width: 0;
+  }
+  .select > select {
+    appearance: none;
+    padding-right: calc(var(--space-3) * 2 + 0.75rem);
+    cursor: pointer;
+    text-overflow: ellipsis;
+  }
+  .select::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: var(--space-3);
+    width: 0.75rem;
+    height: 0.75rem;
+    margin-top: -0.375rem;
+    background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 4.25 6 8.25l4-4'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 4.25 6 8.25l4-4'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+    pointer-events: none;
+  }
+  .select:has(select:disabled)::after {
+    background: var(--text-disabled);
+  }
+  .select option {
+    background: var(--pigment-prussian-120);
+    color: var(--pigment-paper);
+  }
+
+  /* ==================================================== 07 checkbox, toggle */
+
+  /*
+    <label class="choice"><input class="checkbox" type="checkbox"><span>Label</span></label>
+    <label class="choice"><input class="toggle" type="checkbox" role="switch"><span>Label</span></label>
+  */
+  .choice {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    font-size: var(--text-control);
+    line-height: 1.35;
+    cursor: pointer;
+  }
+  .choice:has(:disabled) {
+    color: var(--text-disabled);
+    cursor: not-allowed;
+  }
+  .choice small {
+    display: block;
+    font-size: var(--text-fine);
+    color: var(--text-2);
+  }
+
+  .checkbox {
+    appearance: none;
+    flex: none;
+    display: inline-grid;
+    place-content: center;
+    width: 1.125rem;
+    height: 1.125rem;
+    margin: 0.1em 0 0;
+    border: var(--hair) solid var(--rule-control);
+    border-radius: var(--radius-control);
+    background: var(--field);
+    cursor: pointer;
+    transition:
+      background-color var(--dur-1),
+      border-color var(--dur-1);
+  }
+  .checkbox::before {
+    content: "";
+    width: 0.75rem;
+    height: 0.75rem;
+    background: var(--on-action);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23000' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.25 6.5 4.75 9l5-6'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23000' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.25 6.5 4.75 9l5-6'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+    opacity: 0;
+  }
+  .checkbox:hover {
+    border-color: var(--text);
+  }
+  .checkbox:checked {
+    border-color: var(--action);
+    background: var(--action);
+  }
+  .checkbox:checked::before {
+    opacity: 1;
+  }
+  .checkbox:indeterminate {
+    border-color: var(--action);
+    background: var(--action);
+  }
+  .checkbox:indeterminate::before {
+    width: 0.625rem;
+    height: var(--line);
+    -webkit-mask: none;
+    mask: none;
+    opacity: 1;
+  }
+  .checkbox:disabled {
+    border-color: var(--rule);
+    background: transparent;
+    cursor: not-allowed;
+  }
+  .checkbox:disabled:checked {
+    background: var(--text-disabled);
+  }
+
+  /* A switch drawn square: an outlined track, a solid block that crosses it. */
+  .toggle {
+    appearance: none;
+    flex: none;
+    position: relative;
+    width: 2.5rem;
+    height: 1.375rem;
+    margin: 0;
+    border: var(--hair) solid var(--rule-control);
+    border-radius: var(--radius-control);
+    background: var(--field);
+    cursor: pointer;
+    transition:
+      background-color var(--dur-2),
+      border-color var(--dur-1);
+  }
+  .toggle::before {
+    content: "";
+    position: absolute;
+    top: 0.1875rem;
+    left: 0.1875rem;
+    width: 0.875rem;
+    height: 0.875rem;
+    border-radius: 1px;
+    background: var(--text-2);
+    transition:
+      transform var(--dur-2) var(--ease-settle),
+      background-color var(--dur-2);
+  }
+  .toggle:hover {
+    border-color: var(--text);
+  }
+  .toggle:checked {
+    border-color: var(--action);
+    background: var(--action);
+  }
+  .toggle:checked::before {
+    background: var(--on-action);
+    transform: translateX(1.125rem);
+  }
+  .toggle:disabled {
+    border-color: var(--rule);
+    background: transparent;
+    cursor: not-allowed;
+  }
+  .toggle:disabled::before {
+    background: var(--text-disabled);
+  }
+
+  /* ======================================================== 08 caution band */
+
+  /* The status that must not be missed: devnet, unaudited. One flat band of
+     chart magenta across the top of the surface. No icon, no animation. */
+  .caution-band {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 0.4em;
+    min-height: 1.875rem;
+    padding: 0.375rem var(--caution-band-x, var(--gutter));
+    background: var(--caution-band);
+    color: var(--on-caution-band);
+    font-size: var(--text-fine);
+    font-weight: var(--weight-medium);
+    line-height: 1.35;
+  }
+  .caution-band strong {
+    font-weight: 700;
+  }
+  .caution-band a {
+    color: inherit;
+  }
+  .caution-band :focus-visible {
+    outline-color: var(--on-caution-band);
+  }
+
+  /* ============================================= 09 notice, status, reasons */
+
+  /*
+    A note printed on the chart. A rule above it, a title, a sentence.
+      .notice            neutral: hairline
+      .notice--caution   magenta: something the reader must not miss
+      .notice--done      buff: it happened (there is no green in this system)
+    .notice--inline is the one-line form, with an icon and no rule.
+  */
+  .notice {
+    display: grid;
+    gap: var(--space-1);
+    padding-top: var(--space-3);
+    border-top: var(--line) solid var(--rule-strong);
+    font-size: var(--text-small);
+    line-height: 1.5;
+  }
+  .notice__title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: var(--weight-strong);
+  }
+  .notice__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+  .notice--caution {
+    border-top-color: var(--caution);
+  }
+  .notice--caution .notice__title {
+    color: var(--caution);
+  }
+  .notice--done {
+    border-top-color: var(--public);
+  }
+  .notice--done .notice__title {
+    color: var(--public);
+  }
+  .notice--inline {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding-top: 0;
+    border-top: 0;
+    font-size: var(--text-fine);
+  }
+  .notice--inline .icon {
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0.15em;
+  }
+  .notice--inline.notice--caution {
+    color: var(--caution);
+  }
+  .notice--inline.notice--done {
+    color: var(--public);
+  }
+
+  /*
+    .notice--status  the answer to a form, or to anything asked for: a notice
+    that is not shown until it has something to say. It appears when the URL
+    fragment names it (:target), so a page without JavaScript can show it (the
+    service answers the form by sending the browser back to #its-id), or when
+    a script sets data-shown on it.
+    <div class="notice notice--done notice--status" id="joined" tabindex="-1">
+      <p class="notice__title"><svg class="icon">check</svg>Joined the waitlist</p>
+      <p>…</p>
+    </div>
+    Give it an id, and tabindex="-1" so that focus can be moved to it and it is
+    read out. It is not a control, so it takes no ring.
+  */
+  .notice--status {
+    display: none;
+    scroll-margin-top: var(--space-24);
+  }
+  .notice--status:target,
+  .notice--status[data-shown] {
+    display: grid;
+  }
+  .notice--inline.notice--status:target,
+  .notice--inline.notice--status[data-shown] {
+    display: flex;
+  }
+  .notice--status:focus,
+  .notice--status:focus-visible {
+    outline: none;
+  }
+
+  /*
+    The reasons under a caution (or under anything that needs them): a short
+    list, one full sentence each, marked with the chart's small square.
+    <div class="notice notice--caution">
+      <p class="notice__title"><svg class="icon">caution</svg>This withdrawal points back at your deposit</p>
+      <ul class="reasons">
+        <li>It goes to the address you dived in from.</li>
+        <li>It is the same amount as your dive-in today 14:02.</li>
+      </ul>
+      <p>You can still surface. Another amount, later, to a fresh address gives less away.</p>
+    </div>
+  */
+  .reasons {
+    display: grid;
+    gap: var(--space-05);
+    padding-left: 1.125rem;
+    list-style: square;
+  }
+
+  /* =========================================================== 10 waterline */
+
+  /* <hr class="waterline">. Land above it, water below it, always. It is a
+     2px buff line: under buff land (dusk) it is simply the land's edge; under
+     midnight land (night) and inside figures it is a drawn line. */
+  .waterline {
+    display: block;
+    width: 100%;
+    height: 0;
+    border: 0;
+    border-top: var(--line) solid var(--waterline);
+  }
+
+  /* ========================================================= 11 hero, mirror */
+
+  /*
+    The one bold thing: the headline reflected across the waterline. One line
+    upright on land, one line italic in the water. The land is painted by the
+    upright line itself, upward and outward, so whatever sits above it (the
+    masthead) stands on land, and the bottom edge of that line IS the waterline.
+
+    <header class="masthead land">…</header>
+    <section class="hero water" data-depth="0">
+      <div class="wrap hero__grid">
+        <h1 class="mirror">
+          <span class="mirror__land">Your wallet is public.</span>
+          <span class="mirror__water">The Loch is not.</span>
+        </h1>
+        <div class="hero__body">lede, .hero__actions, caution note</div>
+        <figure class="hero__figure">…a .popup…</figure>      optional
+      </div>
+    </section>
+
+    From 75rem up the figure hangs through the waterline, so that the popup's
+    own waterline and the page's are one line.
+  */
+  .hero {
+    position: relative;
+    isolation: isolate;
+    overflow-x: clip;
+    padding-bottom: var(--band-bottom);
+  }
+  .hero__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto;
+  }
+  .mirror {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    display: grid;
+    grid-template-rows: subgrid;
+    font-family: var(--font-serif);
+    font-weight: var(--weight-regular);
+    font-size: max(var(--serif-min), var(--text-title-1));
+    line-height: 1.02;
+    letter-spacing: var(--tracking-display);
+    text-wrap: balance;
+  }
+  .mirror__land {
+    position: relative;
+    display: block;
+    align-self: end;
+    padding-top: var(--space-8);
+    padding-bottom: 0.07em;
+    color: var(--land-ink);
+    font-style: normal;
+  }
+  .mirror__land::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: -60rem -100vw 0;
+    border-bottom: var(--line) solid var(--waterline);
+    background: var(--land);
+  }
+  .mirror__water {
+    display: block;
+    margin-left: -0.02em;
+    padding-top: 0.1em;
+    color: var(--loch);
+    font-style: italic;
+  }
+  .hero__body {
+    grid-column: 1;
+    grid-row: 3;
+    display: grid;
+    align-content: start;
+    justify-items: start;
+    gap: var(--space-6);
+    padding-top: var(--space-10);
+  }
+  .hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+  .hero__figure {
+    grid-column: 1;
+    grid-row: 4;
+    justify-self: start;
+    max-width: 100%;
+    margin-top: var(--space-10);
+  }
+  .hero__figure figcaption {
+    max-width: 380px;
+    margin-top: var(--space-3);
+    font-size: var(--text-fine);
+    line-height: 1.45;
+    color: var(--text-2);
+  }
+  @media (min-width: 75rem) {
+    .hero__grid {
+      grid-template-columns: minmax(0, 1fr) 380px;
+      grid-template-rows: auto auto 1fr;
+      column-gap: var(--space-16);
+    }
+    /* Keep the waterline low enough that the popup's land clears the masthead. */
+    .hero__grid:has(.hero__figure) .mirror__land {
+      padding-top: max(var(--space-8), calc(var(--popup-land) + var(--space-2) - 1.09em));
+    }
+    .hero__figure {
+      grid-column: 2;
+      grid-row: 2 / span 2;
+      margin-top: calc(-1 * var(--popup-land));
+    }
+  }
+
+  /* ============================================================= 12 contour */
+
+  /*
+    A depth contour, drawn as a chart draws one: a hairline broken to let its
+    own label through. As the first child of a .band it sits exactly on the
+    edge between two tints. The label is small sloping sans, as soundings are.
+    <div class="contour" aria-hidden="true"><span>20 m</span></div>
+    .contour--inset  a contour inside a column (popup, sheet): no page grid.
+  */
+  .contour {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: minmax(var(--gutter), 1fr) minmax(0, var(--page-max)) minmax(var(--gutter), 1fr);
+    align-items: center;
+    height: 1.75rem;
+  }
+  .contour::before,
+  .contour::after,
+  .contour > span::after {
+    content: "";
+    border-top: var(--hair) solid var(--rule-strong);
+  }
+  .contour::before {
+    margin-right: var(--space-3);
+  }
+  .contour > span {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-family: var(--font-figures);
+    font-size: var(--text-small);
+    font-style: italic;
+    font-weight: var(--weight-medium);
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--loch);
+  }
+  .contour > span::after {
+    flex: 1;
+  }
+  .contour--inset {
+    grid-template-columns: var(--space-4) minmax(0, 1fr) 0;
+  }
+
+  /* ======================================= 13 band, section head, page head */
+
+  /* A band of water between two contours. */
+  .band {
+    padding: var(--band-top) 0 var(--band-bottom);
+  }
+  .band > .contour:first-child {
+    margin-top: calc(-1 * var(--band-top) - 0.875rem);
+    margin-bottom: calc(var(--band-top) - 0.875rem);
+  }
+
+  .section-head {
+    display: grid;
+    gap: var(--space-5);
+    max-width: var(--measure-wide);
+  }
+
+  /*
+    A page that is not the first one: no mirrored headline. Its title stands on
+    land, above the one waterline, and its text is in the water under it.
+    <header class="masthead land">…</header>
+    <main>
+      <div class="land">
+        <div class="wrap page-head">
+          <h1 class="t-display-1">What this site keeps.</h1>
+          <p class="t-lede">Nothing, unless you give it an email address.</p>     optional
+        </div>
+      </div>
+      <hr class="waterline">
+      <div class="page water" data-depth="0">
+        <div class="wrap">…</div>
+      </div>
+    </main>
+    <footer class="footer band water" data-depth="bed">…</footer>
+    .page-head is the room around the title; the line under it is said more
+    quietly. .page is the water the text lies in: deepen it with data-depth,
+    and follow it with bands or the footer.
+  */
+  .page-head {
+    padding: var(--page-head-top) 0 var(--page-head-bottom);
+  }
+  .page-head > * + * {
+    margin-top: calc(var(--stack-tight) + var(--space-1));
+  }
+  .page-head .t-lede {
+    color: var(--text-2);
+  }
+  .page {
+    padding: var(--page-top) 0 var(--band-bottom);
+  }
+
+  /* ====================================================== 14 definition rows */
+
+  /*
+    Ruled term / description rows: the Cautions and Commitments tables.
+    <section class="deflist deflist--caution">
+      <h3 class="deflist__title">Cautions</h3>
+      <dl>
+        <div class="deflist__row"><dt>Devnet only</dt><dd>…</dd></div>
+      </dl>
+    </section>
+    .deflist--kv  key on the left, value on the right: review rows in a sheet.
+  */
+  .deflist__title {
+    padding-bottom: var(--space-3);
+    font-size: var(--text-small);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-ui);
+    color: var(--public);
+  }
+  .deflist__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1) var(--space-5);
+    padding: var(--row-y) 0 calc(var(--row-y) + 0.125rem);
+    border-top: var(--hair) solid var(--rule);
+  }
+  .deflist dt {
+    font-size: var(--text-body);
+    font-weight: var(--weight-strong);
+    line-height: 1.35;
+  }
+  .deflist dd {
+    max-width: var(--measure);
+    font-size: var(--text-small);
+    line-height: 1.6;
+  }
+  @media (min-width: 35rem) {
+    .deflist__row {
+      grid-template-columns: 11rem minmax(0, 1fr);
+    }
+  }
+  .deflist--caution .deflist__title,
+  .deflist--caution dt {
+    color: var(--caution);
+  }
+
+  .deflist--kv .deflist__row {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    padding: var(--space-2) 0;
+  }
+  .deflist--kv dt {
+    font-size: var(--text-small);
+    font-weight: var(--weight-regular);
+    color: var(--text-2);
+  }
+  .deflist--kv dd {
+    max-width: none;
+    font-size: var(--text-small);
+    line-height: 1.35;
+    text-align: right;
+  }
+  .deflist--kv .deflist__row:last-child {
+    border-bottom: var(--hair) solid var(--rule);
+  }
+
+  /* ========================================================== 15 data table */
+
+  /*
+    <table class="table">
+      <thead><tr><th scope="col">When</th><th scope="col" class="num">Amount</th></tr></thead>
+      <tbody><tr><td>…</td><td class="num fig">…</td></tr></tbody>
+    </table>
+    Figures go in .num cells: right-aligned, tabular.
+  */
+  .table {
+    width: 100%;
+    font-size: var(--text-small);
+    line-height: 1.4;
+  }
+  .table caption {
+    padding-bottom: var(--space-3);
+    text-align: left;
+    font-size: var(--text-small);
+    font-weight: var(--weight-strong);
+  }
+  .table th,
+  .table td {
+    padding: var(--row-y) var(--space-4) var(--row-y) 0;
+  }
+  .table th:last-child,
+  .table td:last-child {
+    padding-right: 0;
+  }
+  .table thead th {
+    padding-top: 0;
+    padding-bottom: var(--space-2);
+    font-size: var(--text-fine);
+    font-weight: var(--weight-strong);
+    color: var(--text-2);
+    white-space: nowrap;
+  }
+  .table tbody tr {
+    border-top: var(--hair) solid var(--rule);
+  }
+  .table tbody tr:last-child {
+    border-bottom: var(--hair) solid var(--rule);
+  }
+  .table tbody th {
+    font-weight: var(--weight-medium);
+  }
+  .table .num {
+    text-align: right;
+    font-family: var(--font-figures);
+    font-variant-numeric: lining-nums tabular-nums;
+    white-space: nowrap;
+  }
+  .table--interactive tbody tr:hover {
+    background: var(--wash);
+  }
+  /* On a narrow screen a table scrolls sideways inside its own box; it is never crushed.
+     A region that scrolls has to be reachable from the keyboard:
+     <div class="table-scroll" tabindex="0" role="group" aria-label="Findings">…</div> */
+  .table-scroll {
+    overflow-x: auto;
+  }
+  .table-scroll > .table {
+    min-width: var(--table-min, 32rem);
+  }
+
+  /* ============================================================ 16 activity */
+
+  /*
+    <ul class="activity">
+      <li class="activity__row is-public">
+        <svg class="icon">…</svg>
+        <span class="activity__main">
+          <span class="activity__title">Dived in</span>
+          <span class="activity__meta">From Fh3q…Tz8K, today 14:02</span>
+        </span>
+        <span class="activity__amount fig"><span class="fig-sign">+</span>5.000</span>
+      </li>
+      <li class="activity__row is-shielded">…</li>
+    </ul>
+    Public rows are upright, their figure in buff. Shielded rows are italic,
+    in loch blue. Both columns are tabular, so the points line up.
+  */
+  .activity {
+    display: grid;
+  }
+  .activity__row {
+    display: grid;
+    grid-template-columns: var(--icon) minmax(0, 1fr) auto;
+    column-gap: var(--space-3);
+    align-items: center;
+    min-height: var(--row-min);
+    padding: calc(var(--row-y) * 0.375) 0;
+    border-top: var(--hair) solid var(--rule);
+    color: var(--text);
+    font-style: normal;
+    font-weight: var(--weight-regular);
+    text-decoration: none;
+  }
+  a.activity__row:hover,
+  button.activity__row:hover {
+    background: var(--wash);
+  }
+  .activity__main {
+    display: grid;
+    min-width: 0;
+  }
+  .activity__title {
+    overflow: hidden;
+    font-size: var(--text-body);
+    font-weight: var(--weight-medium);
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .activity__meta {
+    overflow: hidden;
+    font-family: var(--font-figures);
+    font-size: var(--text-fine);
+    font-style: normal;
+    font-weight: var(--weight-regular);
+    line-height: 1.3;
+    color: var(--text-2);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .activity__amount {
+    font-size: var(--text-body);
+    font-weight: var(--weight-medium);
+    text-align: right;
+  }
+  .activity__row.is-public .icon,
+  .activity__row.is-public .activity__amount {
+    color: var(--public);
+  }
+  .activity__row.is-shielded .icon,
+  .activity__row.is-shielded .activity__title,
+  .activity__row.is-shielded .activity__amount {
+    color: var(--shielded);
+  }
+  .activity__row.is-shielded .activity__title,
+  .activity__row.is-shielded .activity__amount {
+    font-style: italic;
+  }
+  .activity__row[data-state="pending"] .activity__meta {
+    color: var(--text);
+  }
+
+  /* ============================================================= 17 balance */
+
+  /*
+    <section class="balance balance--shielded">
+      <p class="balance__label">Shielded balance</p>
+      <p class="balance__figure">
+        <span class="sounding"><span>12</span><span class="sounding__frac">.480</span></span>
+        <span class="fig-unit">devnet SOL</span>
+      </p>
+      <p class="balance__note">In the Loch. Visible only to you.</p>
+    </section>
+    Public: <span class="figure is-public">41.207</span> in place of the sounding.
+
+    A label or a note that carries a quiet link at its end (the state of the
+    sync, the way to receive) goes in a row:
+      <div class="balance__row">
+        <p class="balance__label">Shielded balance</p>
+        <button class="link link--quiet fig" type="button">Synced 14:02</button>
+      </div>
+    A figure that has not been read yet is drawn as a broken line: see
+    .is-unsurveyed.
+  */
+  .balance {
+    display: grid;
+    gap: 0.125rem;
+  }
+  .balance__row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+  .balance__row > .balance__note {
+    flex: 1;
+    min-width: 0;
+  }
+  .balance__row > .link {
+    flex: none;
+  }
+  .balance__label {
+    font-size: var(--text-fine);
+    font-weight: var(--weight-medium);
+    line-height: var(--leading-ui);
+    color: var(--text-2);
+  }
+  .balance__figure {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 0.625rem;
+  }
+  .balance__note {
+    margin-top: var(--space-1);
+    font-size: var(--text-fine);
+    line-height: 1.4;
+    color: var(--text-2);
+  }
+
+  /* =============================================================== 18 score */
+
+  /*
+    The privacy score. It is computed from public history, so it is public:
+    upright, buff on water, ink on land.
+    <div class="score">
+      <p class="score__label">Privacy score</p>
+      <p class="score__figure"><span class="figure figure--xl is-public">39</span> <span class="score__of">of 100</span></p>
+      <p class="score__verdict">Shallow water. …</p>
+    </div>
+    .score--inline is the small form for the popup's land band.
+  */
+  .score {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .score__label {
+    font-size: var(--text-fine);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-ui);
+  }
+  .score__figure {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+  }
+  .score__of {
+    font-size: var(--text-small);
+    font-weight: var(--weight-medium);
+    color: var(--text-2);
+  }
+  .score__verdict {
+    max-width: 22em;
+    font-size: var(--text-body);
+    line-height: 1.45;
+  }
+  .score--inline {
+    gap: 0.125rem;
+  }
+  .score--inline .score__label {
+    font-weight: var(--weight-medium);
+    color: var(--text-2);
+  }
+  .score--inline .score__figure {
+    gap: var(--space-2);
+  }
+  .score--inline .score__of {
+    font-size: var(--text-fine);
+    font-weight: var(--weight-strong);
+  }
+  a.score {
+    color: inherit;
+    text-decoration: none;
+  }
+  .score__link {
+    margin-left: var(--space-2);
+    font-size: var(--text-fine);
+    font-weight: var(--weight-strong);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+  }
+  a.score:hover .score__link {
+    text-decoration-thickness: 2px;
+  }
+
+  /* ====================================================== 19 severity, flag */
+
+  /* <span class="sev" data-sev="high">High</span>. Words, not colours: only
+     "high" takes the caution ink. */
+  .sev {
+    display: inline-block;
+    padding: 0.0625rem 0.4375rem 0.125rem;
+    border: var(--hair) solid var(--rule-strong);
+    border-radius: var(--radius-control);
+    font-size: var(--text-fine);
+    font-weight: var(--weight-strong);
+    line-height: 1.3;
+    white-space: nowrap;
+    color: var(--text);
+  }
+  .sev[data-sev="high"] {
+    border-color: var(--caution);
+    color: var(--caution);
+  }
+  .sev[data-sev="low"] {
+    border-color: var(--rule);
+    color: var(--text-2);
+  }
+
+  /* A flag on a sheet: "Example report". Buff, because it is a plain fact. */
+  .flag {
+    display: inline-block;
+    padding: 0.125rem 0.625rem 0.1875rem;
+    border-radius: var(--radius-control);
+    background: var(--action);
+    color: var(--on-action);
+    font-size: var(--text-fine);
+    font-weight: var(--weight-strong);
+    line-height: 1.35;
+    white-space: nowrap;
+  }
+
+  /* ================================================ 20 statement (findings) */
+
+  /*
+    The findings, read as a statement of account: 100, less each leak, leaves
+    the score. This is also the text equivalent of the stepped bed.
+    <ol class="statement">
+      <li class="statement__row statement__row--open">
+        <span class="statement__what"><strong>A wallet with no leaks</strong></span>
+        <span class="statement__fig fig">100</span>
+      </li>
+      <li class="statement__row">
+        <span class="sev" data-sev="high">High</span>
+        <span class="statement__what"><strong>Funding source is public</strong><span>First funds came from …</span></span>
+        <span class="statement__fig statement__fig--less fig"><span class="fig-sign">−</span>20</span>
+      </li>
+      <li class="statement__row statement__row--total">…<span class="statement__fig fig">39</span></li>
+    </ol>
+  */
+  .statement {
+    display: grid;
+  }
+  .statement__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-1) var(--space-4);
+    align-items: baseline;
+    padding: var(--row-y) 0;
+    border-top: var(--hair) solid var(--rule);
+  }
+  .statement__row > .sev {
+    grid-column: 1;
+    justify-self: start;
+  }
+  .statement__what {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 0.1875rem;
+  }
+  .statement__row > .sev + .statement__what {
+    grid-row: 2;
+  }
+  .statement__what strong {
+    font-size: var(--text-body);
+    font-weight: var(--weight-strong);
+    line-height: 1.35;
+  }
+  .statement__what > span {
+    max-width: 50em;
+    font-size: var(--text-small);
+    line-height: 1.5;
+    color: var(--text-2);
+  }
+  .statement__fig {
+    grid-column: 2;
+    grid-row: 1;
+    font-size: var(--text-body);
+    font-weight: var(--weight-medium);
+    text-align: right;
+    color: var(--public);
+  }
+  .statement__fig--less {
+    color: var(--caution);
+  }
+  .statement__row--open .statement__what,
+  .statement__row--total .statement__what {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .statement__row--total {
+    border-top: var(--line) solid var(--public);
+  }
+  .statement__row--total .statement__fig {
+    white-space: nowrap;
+    font-family: var(--font-serif);
+    font-size: max(var(--serif-min), var(--text-title-3));
+    font-weight: var(--weight-regular);
+    line-height: 1;
+  }
+  .statement__row--total .statement__fig small {
+    margin-left: 0.4em;
+    font-family: var(--font-sans);
+    font-size: var(--text-fine);
+    font-weight: var(--weight-medium);
+    color: var(--text-2);
+  }
+  @container (min-width: 40rem) {
+    .statement__row {
+      grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+      gap: 0 var(--space-6);
+    }
+    .statement__row > .sev {
+      margin-top: 0.125rem;
+    }
+    .statement__row > .sev + .statement__what,
+    .statement__what {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .statement__row--open .statement__what,
+    .statement__row--total .statement__what {
+      grid-column: 2;
+    }
+    .statement__fig {
+      grid-column: 3;
+    }
+  }
+  .statement-wrap {
+    container-type: inline-size;
+  }
+
+  /* ========================================================= 21 charts, fit */
+
+  /*
+    The three figures are drawn by @loch/design/charts as inline SVG. These
+    rules letter and ink them. The hex values written into the SVG are only a
+    fallback for when it is opened on its own.
+    <figure class="chart">
+      …svg…
+      <figcaption class="chart__caption">…</figcaption>
+    </figure>
+
+    A figure from the helpers is <svg class="lc …" width height data-w>. It is
+    shown at the width it was drawn at (its width attribute) and shrinks to fit
+    a narrower column; it is never enlarged, so its lettering is never larger
+    than it was drawn. Nothing about it is set with a style attribute.
+  */
+  .chart {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+    min-width: 0;
+  }
+  .chart svg {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+  .chart svg.lc {
+    width: auto;
+    max-width: 100%;
+  }
+  .chart__caption {
+    max-width: 44em;
+    font-size: var(--text-fine);
+    line-height: 1.5;
+    color: var(--text-2);
+  }
+
+  .lc text {
+    font-family: var(--font-figures);
+    font-variant-numeric: lining-nums tabular-nums;
+    fill: var(--text);
+  }
+  .lc .lc-surface {
+    stroke: var(--waterline);
+    stroke-width: 2;
+    fill: none;
+  }
+  .lc .lc-water {
+    fill: var(--chart-water);
+  }
+  .lc .lc-bedline {
+    stroke: var(--loch);
+    stroke-width: 2;
+    fill: none;
+  }
+  .lc .lc-ground {
+    fill: var(--bed);
+  }
+  .lc .lc-hatch-line {
+    stroke: var(--chart-hatch);
+    stroke-width: 1;
+  }
+  .lc .lc-rule {
+    stroke: var(--rule-strong);
+    stroke-width: 1;
+    fill: none;
+  }
+  .lc .lc-rule-faint {
+    stroke: var(--rule);
+    stroke-width: 1;
+    fill: none;
+  }
+  .lc text.lc-sounding {
+    font-family: var(--font-serif);
+    font-style: normal;
+    fill: var(--public);
+  }
+  .lc text.lc-label {
+    font-weight: 500;
+    fill: var(--public);
+  }
+  .lc text.lc-quiet {
+    fill: var(--text-2);
+  }
+  .lc text.lc-caution {
+    font-weight: 600;
+    fill: var(--caution);
+  }
+  .lc text.lc-note-caution {
+    font-weight: 500;
+    fill: var(--caution);
+  }
+  .lc .lc-caution-line {
+    stroke: var(--caution);
+    stroke-width: 1.5;
+    fill: none;
+  }
+  .lc .lc-link {
+    stroke: var(--public);
+    fill: none;
+    stroke-linecap: round;
+  }
+  .lc .lc-link-faint {
+    stroke: var(--rule-strong);
+    stroke-width: 1;
+    fill: none;
+  }
+  .lc .lc-node {
+    fill: var(--ground);
+    stroke: var(--public);
+    stroke-width: 1.5;
+  }
+  .lc .lc-node-caution {
+    fill: var(--ground);
+    stroke: var(--caution);
+    stroke-width: 1.5;
+  }
+  .lc .lc-station {
+    fill: var(--public);
+  }
+  .lc text.lc-strong {
+    font-weight: 600;
+    fill: var(--text);
+  }
+
+  /* The soundings drop, once, when a scan has just finished. Add .is-sounding
+     to the svg. It answers the user's action and it honours reduced motion.
+     Each column says its place in the sequence with data-i (0 to 12); these
+     rules turn that into the delay. (--i set by hand still works.) */
+  .lc [data-i="1"] {
+    --i: 1;
+  }
+  .lc [data-i="2"] {
+    --i: 2;
+  }
+  .lc [data-i="3"] {
+    --i: 3;
+  }
+  .lc [data-i="4"] {
+    --i: 4;
+  }
+  .lc [data-i="5"] {
+    --i: 5;
+  }
+  .lc [data-i="6"] {
+    --i: 6;
+  }
+  .lc [data-i="7"] {
+    --i: 7;
+  }
+  .lc [data-i="8"] {
+    --i: 8;
+  }
+  .lc [data-i="9"] {
+    --i: 9;
+  }
+  .lc [data-i="10"] {
+    --i: 10;
+  }
+  .lc [data-i="11"] {
+    --i: 11;
+  }
+  .lc [data-i="12"] {
+    --i: 12;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lc.is-sounding .lc-col {
+      animation: loch-sound var(--dur-sounding) var(--ease-settle) both;
+      animation-delay: calc(var(--i, 0) * 110ms);
+      transform-box: fill-box;
+      transform-origin: 50% 0;
+    }
+    .lc.is-sounding .lc-sounding {
+      animation: loch-read calc(var(--dur-sounding) / 3) linear both;
+      animation-delay: calc(var(--i, 0) * 110ms + var(--dur-sounding) * 0.6);
+    }
+    [data-motion="reduce"] .lc.is-sounding .lc-col,
+    [data-motion="reduce"] .lc.is-sounding .lc-sounding {
+      animation: none;
+    }
+  }
+  @keyframes loch-sound {
+    from {
+      transform: scaleY(0.02);
+    }
+  }
+  @keyframes loch-read {
+    from {
+      opacity: 0;
+    }
+  }
+
+  /*
+    A stepped figure, for a page that cannot measure: a static page, or one
+    read without JavaScript. The figure is drawn at several widths and this
+    shows one drawing, the widest that fits the element's own width.
+    <figure class="chart">
+      <div class="fit">
+        <svg class="lc …" data-w="280">…</svg>
+        <svg class="lc …" data-w="400">…</svg>
+        <svg class="lc …" data-w="568">…</svg>
+      </div>
+      <figcaption class="chart__caption">…</figcaption>
+    </figure>
+    Narrowest first. There is a step at 280, 318, 360, 400, 440, 480, 520,
+    568, 612, 656, 704 and 757px: draw at any of them (fitHtml() in
+    @loch/design/charts writes this markup). The drawing shown fills the
+    width, so it is enlarged by no more than the distance to the next step it
+    has: with every step drawn, under 14%. The others are display: none, so
+    assistive technology meets the figure once.
+    .fit has to be given its width (a block, a grid cell): it cannot take one
+    from what is inside it. Where container queries or :has() are missing the
+    narrowest drawing is shown, at the width it has.
+  */
+  .fit {
+    container-type: inline-size;
+    min-width: 0;
+  }
+  .fit > [data-w] {
+    display: none;
+  }
+  .fit > svg[data-w] {
+    width: 100%;
+    height: auto;
+  }
+  .fit > [data-w]:first-child {
+    display: block;
+  }
+  @supports selector(:has(a)) {
+    @container (min-width: 318px) {
+      .fit:has(> [data-w="318"]) > [data-w] {
+        display: none;
+      }
+      .fit > [data-w][data-w="318"] {
+        display: block;
+      }
+    }
+    @container (min-width: 360px) {
+      .fit:has(> [data-w="360"]) > [data-w] {
+        display: none;
+      }
+      .fit > [data-w][data-w="360"] {
+        display: block;
+      }
+    }
+    @container (min-width: 400px) {
+      .fit:has(> [data-w="400"]) > [data-w] {
+        display: none;
+      }
+      .fit > [data-w][data-w="400"] {
+        display: block;
+      }
+    }
+    @container (min-width: 440px) {
+      .fit:has(> [data-w="440"]) > [data-w] {
+        display: none;
+      }
+      .fit > [data-w][data-w="440"] {
+        display: block;
+      }
+    }
+    @container (min-width: 480px) {
+      .fit:has(> [data-w="480"]) > [data-w] {
+        display: none;
+      }
+      .fit > [data-w][data-w="480"] {
+        display: block;
+      }
+    }
+    @container (min-width: 520px) {
+      .fit:has(> [data-w="520"]) > [data-w] {
+        display: none;
+      }
+      .fit > [data-w][data-w="520"] {
+        display: block;
+      }
+    }
+    @container (min-width: 568px) {
+      .fit:has(> [data-w="568"]) > [data-w] {
+        display: none;
+      }
+      .fit > [data-w][data-w="568"] {
+        display: block;
+      }
+    }
+    @container (min-width: 612px) {
+      .fit:has(> [data-w="612"]) > [data-w] {
+        display: none;
+      }
+      .fit > [data-w][data-w="612"] {
+        display: block;
+      }
+    }
+    @container (min-width: 656px) {
+      .fit:has(> [data-w="656"]) > [data-w] {
+        display: none;
+      }
+      .fit > [data-w][data-w="656"] {
+        display: block;
+      }
+    }
+    @container (min-width: 704px) {
+      .fit:has(> [data-w="704"]) > [data-w] {
+        display: none;
+      }
+      .fit > [data-w][data-w="704"] {
+        display: block;
+      }
+    }
+    @container (min-width: 757px) {
+      .fit:has(> [data-w="757"]) > [data-w] {
+        display: none;
+      }
+      .fit > [data-w][data-w="757"] {
+        display: block;
+      }
+    }
+  }
+
+  /* ============================================================== 22 report */
+
+  /*
+    A survey sheet: the leak report. Square, hairline-ruled, one or two tints
+    deeper than the band it lies in. Not a card: no shadow, no corner.
+    <article class="report water" data-depth="120">
+      <header class="report__head"><span class="flag">Example report</span><p>…</p></header>
+      <div class="report__body">…score, chart…</div>
+      <div class="report__section">…</div>
+    </article>
+  */
+  .report {
+    border: var(--hair) solid var(--rule);
+    container-type: inline-size;
+  }
+  .report__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-5);
+    padding: var(--space-3) var(--report-x, var(--space-5));
+    border-bottom: var(--hair) solid var(--rule);
+    font-size: var(--text-small);
+    color: var(--text-2);
+  }
+  .report__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-8);
+    padding: var(--space-6) var(--report-x, var(--space-5));
+  }
+  .report__section {
+    padding: var(--space-5) var(--report-x, var(--space-5));
+    border-top: var(--hair) solid var(--rule);
+  }
+  .report__section > .statement > .statement__row:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .report__figures {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-8);
+  }
+  .report__title {
+    margin-bottom: var(--space-3);
+    font-size: var(--text-small);
+    font-weight: var(--weight-strong);
+  }
+  @container (min-width: 44rem) {
+    .report__body {
+      grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+      gap: var(--space-12);
+      padding-block: var(--space-8);
+    }
+    .report__figures {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: var(--space-12);
+    }
+  }
+  @media (min-width: 48rem) {
+    .report {
+      --report-x: var(--space-8);
+    }
+  }
+
+  /* ======================================================== 23 address chip */
+
+  /*
+    <span class="address-chip">
+      <span class="address-chip__text fig">Fh3q…Tz8K</span>
+      <button class="address-chip__copy" type="button" aria-label="Copy address Fh3q…Tz8K">
+        <svg class="icon icon--sm">copy</svg>
+      </button>
+    </span>
+    After a copy set data-copied on the chip for two seconds and swap the icon
+    to "check"; announce "Copied" in a role="status" region.
+    .address-full  the whole address, in groups of four, for checking by eye.
+  */
+  .address-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    height: var(--control-sm);
+    border: var(--hair) solid var(--rule-strong);
+    border-radius: var(--radius-control);
+    font-size: var(--text-fine);
+    font-weight: var(--weight-medium);
+    line-height: 1;
+    vertical-align: middle;
+  }
+  .address-chip__text {
+    overflow: hidden;
+    padding: 0 var(--space-2) 0 0.625rem;
+    text-overflow: ellipsis;
+  }
+  .address-chip__name {
+    padding-left: 0.625rem;
+    font-weight: var(--weight-strong);
+  }
+  .address-chip__name + .address-chip__text {
+    padding-left: var(--space-2);
+    color: var(--text-2);
+  }
+  .address-chip__copy {
+    display: inline-grid;
+    place-items: center;
+    align-self: stretch;
+    width: var(--control-sm);
+    border-left: var(--hair) solid var(--rule-strong);
+    color: var(--text-2);
+    transition:
+      background-color var(--dur-1),
+      color var(--dur-1);
+  }
+  .address-chip__copy:hover {
+    background: var(--wash);
+    color: var(--text);
+  }
+  .address-chip__copy:active {
+    background: transparent;
+  }
+  .address-chip__copy:focus-visible {
+    outline-offset: 0;
+  }
+  .address-chip[data-copied] .address-chip__copy {
+    color: var(--public);
+  }
+  button.address-chip {
+    padding-right: var(--space-2);
+    cursor: pointer;
+    transition: border-color var(--dur-1);
+  }
+  button.address-chip:hover {
+    border-color: var(--text);
+  }
+
+  .address-full {
+    font-family: var(--font-figures);
+    font-size: var(--text-small);
+    font-weight: var(--weight-medium);
+    line-height: 1.5;
+    letter-spacing: 0.02em;
+    word-spacing: 0.25em;
+    overflow-wrap: anywhere;
+  }
+
+  /* ===================================================== 24 tabs, segmented */
+
+  /*
+    <div class="tabs" role="tablist" aria-label="…">
+      <button class="tabs__tab" role="tab" aria-selected="true">Balance</button>
+      <button class="tabs__tab" role="tab" aria-selected="false" tabindex="-1">Activity</button>
+    </div>
+    The selected tab stands on a short length of waterline.
+  */
+  .tabs {
+    display: flex;
+    gap: var(--space-5);
+    border-bottom: var(--hair) solid var(--rule);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs__tab {
+    position: relative;
+    flex: none;
+    min-height: var(--control-md);
+    padding: 0 0.0625rem;
+    color: var(--text-2);
+    font-size: var(--text-control);
+    font-weight: var(--weight-strong);
+    line-height: 1.15;
+    transition: color var(--dur-1);
+  }
+  .tabs__tab::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 -1px;
+    height: var(--line);
+    background: var(--public);
+    transform: scaleX(0);
+    transition: transform var(--dur-2) var(--ease-settle);
+  }
+  .tabs__tab:hover {
+    color: var(--text);
+  }
+  .tabs__tab[aria-selected="true"] {
+    color: var(--text);
+  }
+  .tabs__tab[aria-selected="true"]::after {
+    transform: scaleX(1);
+  }
+  .tabs__tab:disabled {
+    color: var(--text-disabled);
+    cursor: not-allowed;
+  }
+  .tabs__tab:focus-visible {
+    outline-offset: -2px;
+  }
+
+  /*
+    <div class="segmented" role="radiogroup" aria-label="…">
+      <button role="radio" aria-checked="true">All</button>
+      <button role="radio" aria-checked="false">Public</button>
+    </div>
+  */
+  .segmented {
+    display: inline-flex;
+    max-width: 100%;
+    border: var(--hair) solid var(--rule-control);
+    border-radius: var(--radius-control);
+  }
+  .segmented > button {
+    flex: 1;
+    min-height: calc(var(--control-sm) - 2px);
+    padding: 0 var(--space-3);
+    color: var(--text-2);
+    font-size: var(--text-fine);
+    font-weight: var(--weight-strong);
+    line-height: 1.15;
+    white-space: nowrap;
+    transition:
+      background-color var(--dur-1),
+      color var(--dur-1);
+  }
+  .segmented > button + button {
+    border-left: var(--hair) solid var(--rule-control);
+  }
+  .segmented > button:hover {
+    background: var(--wash);
+    color: var(--text);
+  }
+  .segmented > button[aria-checked="true"],
+  .segmented > button[aria-pressed="true"] {
+    background: var(--action);
+    color: var(--on-action);
+  }
+  .segmented > button:disabled {
+    color: var(--text-disabled);
+    cursor: not-allowed;
+  }
+  .segmented > button:focus-visible {
+    outline-offset: 1px;
+  }
+
+  /* ======================================================= 25 sheet, dialog */
+
+  /*
+    A sheet rises from the bed of the popup; a dialog sits in the middle of a
+    page. Both are flat: a deeper tint, a hairline, a plain scrim. No shadow.
+    Works on <dialog> (showModal) and on a plain element inside .popup with a
+    .scrim before it.
+    <dialog class="sheet" aria-labelledby="t">
+      <header class="sheet__head"><h2 class="sheet__title" id="t">Send privately</h2><button class="btn btn--quiet btn--icon btn--sm" aria-label="Close">…</button></header>
+      <div class="sheet__body">…</div>
+      <footer class="sheet__foot">…buttons…</footer>
+    </dialog>
+  */
+  .scrim {
+    position: absolute;
+    inset: 0;
+    z-index: var(--z-sheet);
+    background: rgb(5 15 21 / 0.72);
+  }
+  .sheet,
+  .dialog {
+    --ground: var(--water-180);
+    color: var(--paper);
+    background: var(--water-180);
+    border: 0;
+    padding: 0;
+  }
+  .sheet {
+    position: absolute;
+    inset: auto 0 0;
+    z-index: var(--z-sheet);
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: none;
+    max-height: calc(100% - 3rem);
+    margin: 0;
+    border-top: var(--hair) solid var(--rule-strong);
+  }
+  dialog.sheet {
+    position: fixed;
+  }
+  dialog.sheet:not([open]),
+  dialog.dialog:not([open]) {
+    display: none;
+  }
+  .sheet__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    min-height: calc(var(--control-md) + var(--space-2));
+    padding: 0 var(--space-2) 0 var(--gutter);
+    border-bottom: var(--hair) solid var(--rule);
+  }
+  .sheet__title {
+    font-size: var(--text-body);
+    font-weight: var(--weight-strong);
+    line-height: 1.25;
+  }
+  .sheet__body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--space-4) var(--gutter);
+  }
+  .sheet__foot {
+    display: flex;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--gutter) var(--space-4);
+    border-top: var(--hair) solid var(--rule);
+  }
+  .sheet__foot > .btn {
+    flex: 1;
+  }
+  .dialog {
+    width: min(100% - 2 * var(--gutter), 34rem);
+    max-height: calc(100% - 2 * var(--gutter));
+    margin: auto;
+    border: var(--hair) solid var(--rule-strong);
+  }
+  .dialog .sheet__head,
+  .dialog .sheet__body,
+  .dialog .sheet__foot {
+    padding-inline: var(--space-6);
+  }
+  .dialog .sheet__head {
+    padding-right: var(--space-3);
+  }
+  .dialog .sheet__foot {
+    justify-content: flex-end;
+  }
+  .dialog .sheet__foot > .btn {
+    flex: none;
+  }
+  dialog.sheet::backdrop,
+  dialog.dialog::backdrop {
+    background: rgb(5 15 21 / 0.72);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    dialog.sheet[open],
+    .sheet.is-arriving {
+      animation: loch-rise var(--dur-3) var(--ease-settle);
+    }
+    dialog.dialog[open] {
+      animation: loch-arrive var(--dur-3) var(--ease-settle);
+    }
+  }
+  @keyframes loch-rise {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes loch-arrive {
+    from {
+      opacity: 0;
+    }
+  }
+
+  /* =============================================================== 26 toast */
+
+  /*
+    <div class="toast-region" role="status" aria-live="polite">
+      <div class="toast toast--done"><svg class="icon">check</svg><p>Dived in. 5.000 SOL is in the Loch.</p></div>
+    </div>
+  */
+  .toast-region {
+    position: absolute;
+    inset: auto var(--gutter) var(--space-4);
+    z-index: var(--z-toast);
+    display: grid;
+    gap: var(--space-2);
+    pointer-events: none;
+  }
+  .toast {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+    border: var(--hair) solid var(--rule-control);
+    border-radius: var(--radius-control);
+    background: var(--bed);
+    color: var(--paper);
+    font-size: var(--text-small);
+    line-height: 1.4;
+    pointer-events: auto;
+  }
+  .toast > p {
+    flex: 1;
+    min-width: 0;
+  }
+  .toast > .icon {
+    margin-top: 0.05em;
+    color: var(--paper-2);
+  }
+  .toast--done {
+    border-color: var(--buff);
+  }
+  .toast--done > .icon {
+    color: var(--buff);
+  }
+  .toast--caution {
+    border-color: var(--water-caution);
+  }
+  .toast--caution > .icon {
+    color: var(--water-caution);
+  }
+  .toast .btn {
+    margin: -0.25rem 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .toast.is-arriving {
+      animation: loch-toast var(--dur-3) var(--ease-settle);
+    }
+  }
+  @keyframes loch-toast {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem);
+    }
+  }
+
+  /* =================================================== 27 progress, working */
+
+  /*
+    A long operation (a proof takes several seconds). A sounding line: what is
+    still to do is dashed, what is done is solid, one tick per stage, and a
+    plain sentence saying what is happening now.
+    <div class="progress" style="--progress: 0.46" role="group" aria-label="Sending privately">
+      <div class="progress__line" aria-hidden="true"><span></span></div>
+      <ol class="progress__stages">
+        <li data-state="done">Checked</li>
+        <li data-state="now" aria-current="step">Proving</li>
+        <li>Sending</li>
+        <li>Confirmed</li>
+      </ol>
+      <p class="progress__status" role="status">Generating the proof on this device. About 8 seconds.</p>
+    </div>
+    Set --progress (0 to 1) from script: el.style.setProperty("--progress", "0.46").
+    A style attribute in the markup does the same, but only where the page's
+    Content-Security-Policy allows inline styles. The line eases to each new
+    value. With reduced motion it steps. Never show a percentage you do not have.
+  */
+  .progress {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .progress__line {
+    position: relative;
+    height: var(--line);
+    background: repeating-linear-gradient(90deg, var(--rule-strong) 0 6px, transparent 6px 11px);
+  }
+  .progress__line > span {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: calc(var(--progress, 0) * 100%);
+    background: var(--shielded);
+    transition: width var(--dur-3) var(--ease-settle);
+  }
+  .progress__line > span::after {
+    content: "";
+    position: absolute;
+    top: -0.1875rem;
+    right: -0.0625rem;
+    width: var(--line);
+    height: 0.5rem;
+    background: var(--shielded);
+  }
+  .progress__stages {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    font-size: var(--text-fine);
+    font-weight: var(--weight-medium);
+    line-height: 1.3;
+    /* A stage not reached yet is still text to be read, so it takes the
+       secondary ink, never the disabled one (4.3:1 at 20 m, 3.7:1 at the
+       surface). The line above says which stages are done. */
+    color: var(--text-2);
+  }
+  .progress__stages > li:last-child {
+    text-align: right;
+  }
+  .progress__stages > li:not(:first-child):not(:last-child) {
+    text-align: center;
+  }
+  .progress__stages > [data-state="done"] {
+    color: var(--text-2);
+  }
+  .progress__stages > [data-state="now"] {
+    color: var(--text);
+    font-weight: var(--weight-strong);
+  }
+  .progress__status {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-top: var(--space-1);
+    font-size: var(--text-small);
+    line-height: 1.4;
+  }
+  .progress__status .fig {
+    color: var(--text-2);
+  }
+  .progress[data-state="failed"] .progress__line > span,
+  .progress[data-state="failed"] .progress__line > span::after {
+    background: var(--caution);
+  }
+  .progress[data-state="failed"] .progress__status {
+    color: var(--caution);
+  }
+
+  /* Working, with no measure of how far: dashes that travel. For a button use
+     aria-busy instead. */
+  .working {
+    display: block;
+    height: var(--line);
+    color: var(--shielded);
+    background: repeating-linear-gradient(90deg, currentColor 0 9px, transparent 9px 16px);
+    animation: loch-dashes var(--dur-dash) linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .working,
+    .btn[aria-busy="true"]::after {
+      animation: none;
+    }
+    .progress__line > span {
+      transition: none;
+    }
+  }
+  [data-motion="reduce"] .working,
+  [data-motion="reduce"] .btn[aria-busy="true"]::after {
+    animation: none;
+  }
+  [data-motion="reduce"] .progress__line > span {
+    transition: none;
+  }
+
+  /* ============================== 28 skeleton, unsurveyed, empty, failure */
+
+  /*
+    Loading: unsurveyed water. A chart marks what it has not measured with a
+    broken line; so do we. No shimmer.
+    <div class="skeleton" aria-busy="true" aria-label="Loading activity"><span></span><span></span><span></span></div>
+  */
+  .skeleton {
+    display: grid;
+  }
+  .skeleton > span {
+    display: block;
+    height: var(--row-min);
+    border-top: var(--hair) dashed var(--rule-strong);
+  }
+  .skeleton > span:last-child {
+    border-bottom: var(--hair) dashed var(--rule-strong);
+  }
+  .skeleton--text > span {
+    height: 0.875em;
+    margin-bottom: 0.6em;
+    border: 0;
+    border-bottom: var(--hair) dashed var(--rule-strong);
+  }
+  .skeleton--text > span:last-child {
+    width: 60%;
+  }
+
+  /*
+    A figure that has not been read yet (a balance before the first answer from
+    the chain, a score before a scan, a balance that is locked): the same broken
+    line, standing where the figure will stand and about as long, so nothing
+    moves when the figure arrives. Add .is-unsurveyed to the element that would
+    hold the figure, leave it empty, and say what it stands for:
+      <span class="sounding is-unsurveyed" role="img" aria-label="Locked"></span>
+      <span class="figure is-public is-unsurveyed" role="img" aria-label="Not read yet"></span>
+      <span class="fig is-unsurveyed" role="img" aria-label="Not read yet"></span>
+    Never write 0.000 for a figure that is not known.
+  */
+  .is-unsurveyed {
+    display: inline-block;
+    width: 3.5em;
+    height: 0.7em;
+    border-bottom: var(--line) dashed var(--rule-strong);
+    vertical-align: baseline;
+  }
+  .figure.is-unsurveyed {
+    width: 3.2em;
+  }
+  .figure--xl.is-unsurveyed {
+    width: 1.4em;
+  }
+  .sounding.is-unsurveyed {
+    width: 2.15em;
+    margin-bottom: 0.14em;
+  }
+
+  /*
+    Empty: a sentence that says what is not here yet and what to do.
+    <div class="empty"><p class="empty__title">Nothing in the Loch yet.</p><p>…</p><button class="btn btn--primary">Dive in</button></div>
+  */
+  .empty,
+  .failure {
+    display: grid;
+    justify-items: start;
+    gap: var(--space-2);
+    padding: var(--space-5) 0;
+    border-top: var(--hair) solid var(--rule);
+    font-size: var(--text-small);
+    line-height: 1.5;
+    color: var(--text-2);
+  }
+  .empty__title,
+  .failure__title {
+    font-size: var(--text-body);
+    font-weight: var(--weight-strong);
+    line-height: 1.3;
+    color: var(--text);
+  }
+  .empty > .btn,
+  .failure > .btn,
+  .failure > .cluster {
+    margin-top: var(--space-2);
+  }
+  /* Failure: what happened, whether funds moved, what to do. */
+  .failure {
+    border-top: var(--line) solid var(--caution);
+    color: var(--text);
+  }
+  .failure__title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--caution);
+  }
+  .failure__detail {
+    font-family: var(--font-figures);
+    font-size: var(--text-fine);
+    color: var(--text-2);
+    overflow-wrap: anywhere;
+  }
+
+  /* ============================================================ 29 masthead */
+
+  /*
+    Stands on land. The name is lettered italic even here: it is the name of a
+    body of water.
+    <header class="masthead land">
+      <div class="wrap masthead__row">
+        <a class="brand" href="/"><img src="mark.svg" alt="" width="30" height="30"><span class="brand__name">Loch</span></a>
+        <nav class="nav" aria-label="Sections"><a href="#" aria-current="page">Leak scanner</a>…</nav>
+        <a class="btn btn--secondary btn--sm" href="#">Join the waitlist</a>
+      </div>
+    </header>
+  */
+  .masthead {
+    position: relative;
+    z-index: 2;
+  }
+  .masthead__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    min-height: 4.25rem;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    margin-right: auto;
+    color: inherit;
+    text-decoration: none;
+  }
+  .brand > img,
+  .brand > svg {
+    flex: none;
+    width: 1.875rem;
+    height: 1.875rem;
+  }
+  .brand__name {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: var(--size-6);
+    line-height: 1;
+    letter-spacing: 0.01em;
+    transform: translateY(-0.04em);
+  }
+  .brand--sm > img,
+  .brand--sm > svg {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+  .brand--sm .brand__name {
+    font-size: var(--size-5);
+  }
+  .nav {
+    display: none;
+    gap: var(--space-8);
+    font-size: var(--text-small);
+    font-weight: var(--weight-medium);
+  }
+  .nav a {
+    text-decoration: none;
+  }
+  .nav a:hover {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+  }
+  .nav a[aria-current] {
+    text-decoration: underline;
+    text-decoration-thickness: var(--line);
+    text-underline-offset: 0.35em;
+  }
+  @media (min-width: 56rem) {
+    .masthead__row {
+      min-height: 4.75rem;
+    }
+    .nav {
+      display: flex;
+    }
+  }
+
+  /* ============================================================== 30 footer */
+
+  /*
+    The bed. <footer class="footer band water" data-depth="bed">…</footer>
+  */
+  .footer__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-8);
+  }
+  .footer__brand {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-4);
+  }
+  .footer__brand img {
+    flex: none;
+    width: 4rem;
+    height: 4rem;
+  }
+  .footer__name {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: var(--size-7);
+    line-height: 1.1;
+    color: var(--loch);
+  }
+  .footer__status {
+    margin-top: var(--space-1);
+    font-size: var(--text-small);
+    color: var(--caution);
+  }
+  .footer__links {
+    display: grid;
+    align-content: start;
+    justify-items: start;
+    gap: var(--space-2);
+    font-size: var(--text-small);
+  }
+  .footer__end {
+    display: grid;
+    gap: var(--space-2);
+    margin-top: var(--space-12);
+    padding-top: var(--space-5);
+    border-top: var(--hair) solid var(--rule);
+  }
+  .footer__depth {
+    font-style: italic;
+    font-weight: var(--weight-medium);
+    font-size: var(--text-small);
+    color: var(--loch);
+  }
+  @media (min-width: 50rem) {
+    .footer__grid {
+      grid-template-columns: 1fr auto auto;
+      column-gap: var(--space-24);
+    }
+    .footer__end {
+      grid-template-columns: 1fr auto;
+      align-items: baseline;
+    }
+  }
+
+  /* ================================================================ 31 code */
+
+  /*
+    The only place the monospace appears.
+    <div class="code">
+      <pre tabindex="0" role="group" aria-label="Command"><code>…</code></pre>
+      <button class="btn btn--quiet btn--sm">Copy</button>
+    </div>
+    A long line scrolls sideways inside the box. A region that scrolls has to be
+    reachable from the keyboard, so the pre takes tabindex="0", a role and a
+    name; when it is focused the ring is drawn round the whole box.
+    .code--wrap  breaks long lines instead of scrolling. Nothing scrolls, so
+                 the pre needs no tabindex.
+  */
+  .code {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+    border: var(--hair) solid var(--rule);
+    border-radius: var(--radius-control);
+    background: var(--field);
+  }
+  .code > pre {
+    flex: 1;
+    min-width: 0;
+    padding: var(--space-2) 0;
+    overflow-x: auto;
+    font-size: 0.8125rem;
+    line-height: 1.55;
+    color: var(--text);
+  }
+  .code > pre > code {
+    font-size: inherit;
+  }
+  .code--wrap > pre {
+    overflow-x: visible;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  @supports selector(:has(a)) {
+    .code > pre:focus-visible {
+      outline: none;
+    }
+    .code:has(> pre:focus-visible) {
+      outline: var(--focus-width) solid var(--focus);
+      outline-offset: var(--focus-offset);
+    }
+  }
+  :not(pre) > code {
+    padding: 0.05em 0.3em 0.1em;
+    border-radius: var(--radius-control);
+    background: var(--wash);
+  }
+
+  /* ===================================== 32 steps, observer, legend */
+
+  /*
+    How it works. It is a real sequence, so it is numbered. Each step carries
+    a small section drawing and a line that says what an observer of the chain
+    sees at that step.
+    <ol class="steps">
+      <li class="step step--dive">
+        <div class="step__diagram" aria-hidden="true">
+          <span class="step__place">Your wallet</span>
+          <span class="step__leg"></span><span class="step__run"></span>
+        </div>
+        <h3 class="step__title t-display-3"><span class="step__n">1</span>Dive in</h3>
+        <p>…</p>
+        <p class="observer"><span class="observer__label">An observer sees</span> your address, the amount, and that it went into the Loch.</p>
+      </li>
+      <li class="step step--move">…<span class="step__where">in the Loch</span><span class="step__run"></span>…</li>
+      <li class="step step--surface">…<span class="step__place">Any address</span>…</li>
+    </ol>
+  */
+  .steps {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-12);
+  }
+  .step {
+    display: grid;
+    align-content: start;
+    gap: var(--space-3);
+  }
+  .step > p {
+    max-width: 30em;
+    font-size: var(--text-small);
+    line-height: 1.6;
+  }
+  .step__title {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+  }
+  .step__n {
+    font-family: var(--font-figures);
+    font-style: normal;
+    font-size: var(--text-small);
+    font-weight: var(--weight-strong);
+    color: var(--text-2);
+  }
+  .step__diagram {
+    position: relative;
+    isolation: isolate;
+    height: 9.25rem;
+    margin-bottom: var(--space-4);
+    color: var(--buff);
+  }
+  /* The waterline, and under it a slice of lighter water. */
+  .step__diagram::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 2.5rem 0 0;
+    border-top: var(--line) solid var(--waterline);
+    background: var(--water-20);
+  }
+  .step__place {
+    position: absolute;
+    top: 0.75rem;
+    left: 2.75rem;
+    font-size: var(--text-fine);
+    font-weight: var(--weight-medium);
+    line-height: 1.2;
+    color: var(--public);
+  }
+  .step--surface .step__place {
+    left: auto;
+    right: 2.75rem;
+  }
+  /* Public legs: solid, buff. They cross the line in plain sight. */
+  .step__leg {
+    position: absolute;
+    top: 1.375rem;
+    bottom: 1.375rem;
+    left: 1.6875rem;
+    border-left: var(--line) solid var(--buff);
+  }
+  .step--surface .step__leg {
+    left: auto;
+    right: 1.6875rem;
+  }
+  .step__leg::before {
+    content: "";
+    position: absolute;
+    left: -0.375rem;
+    top: -0.3125rem;
+    width: 0.625rem;
+    height: 0.625rem;
+    border-radius: 50%;
+    background: var(--buff);
+  }
+  .step__leg::after {
+    content: "";
+    position: absolute;
+    left: -0.4375rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    border: solid var(--buff);
+    border-width: 0 var(--line) var(--line) 0;
+  }
+  .step--dive .step__leg::after {
+    bottom: 1.5rem;
+    transform: rotate(45deg);
+  }
+  .step--surface .step__leg::after {
+    top: 2.5rem;
+    transform: rotate(-135deg);
+  }
+  /* The shielded run: dashed, as a chart draws what lies under the surface. */
+  .step__run {
+    position: absolute;
+    bottom: 1.375rem;
+    left: 0;
+    right: 0;
+    height: var(--line);
+    background: repeating-linear-gradient(90deg, var(--loch) 0 9px, transparent 9px 16px);
+  }
+  .step--dive .step__run {
+    left: 1.75rem;
+  }
+  .step--surface .step__run {
+    right: 1.75rem;
+  }
+  .step__where {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 2rem;
+    text-align: center;
+    font-size: var(--text-small);
+    font-style: italic;
+    font-weight: var(--weight-medium);
+    line-height: 1;
+    color: var(--loch);
+  }
+  @media (min-width: 56rem) {
+    .steps {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0;
+    }
+    .step > :not(.step__diagram) {
+      padding-right: var(--space-10);
+    }
+  }
+
+  /* What anyone watching the chain can see at this step. Public, so upright
+     and buff, under a short length of waterline. */
+  .observer {
+    max-width: 30em;
+    margin-top: var(--space-2);
+    padding-top: var(--space-3);
+    border-top: var(--hair) solid var(--rule-strong);
+    font-size: var(--text-small);
+    line-height: 1.5;
+  }
+  .observer__label {
+    display: block;
+    font-size: var(--text-fine);
+    font-weight: var(--weight-strong);
+    color: var(--public);
+  }
+
+  /* The key to the lettering rule. Put it wherever both kinds of row meet. */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.75em;
+    font-size: var(--text-fine);
+    line-height: 1.4;
+    color: var(--public);
+  }
+
+  /* ========================================================= 33 popup frame */
+
+  /*
+    The extension popup: the same section at 380 x 600. Put
+    data-density="compact" on the same element (or on <html>).
+    <main class="popup" data-density="compact">
+      <div class="popup__land land">
+        <p class="caution-band">…</p>
+        <header class="popup__head">brand, wallet chip</header>
+        <div class="popup__public">public balance | score</div>
+      </div>
+      <hr class="waterline">
+      <div class="popup__water water" data-depth="60">balance, actions</div>
+      <div class="popup__deep water" data-depth="120">activity</div>
+    </main>
+    .popup__deep and .popup__view scroll when what they hold is taller than the
+    frame. Where nothing inside them can take focus, give them tabindex="0"
+    and a name, so that they can be scrolled from the keyboard.
+  */
+  .popup {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 380px;
+    height: 600px;
+    overflow: hidden;
+    background: var(--water-60);
+    color: var(--paper);
+  }
+  /* Land and waterline together are exactly --popup-land tall, so a page that
+     shows the popup can hang it through its own waterline. */
+  .popup__land {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    min-height: calc(var(--popup-land) - var(--line));
+  }
+  /* The caution is never dimmed: it stays above the scrim of a sheet. */
+  .popup .caution-band {
+    position: relative;
+    z-index: calc(var(--z-sheet) + 1);
+  }
+  .popup__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 2.875rem;
+    padding: 0 var(--gutter);
+  }
+  .popup__head .brand {
+    gap: var(--space-2);
+  }
+  .popup__public {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: start;
+    padding: 0.125rem var(--gutter) var(--space-2);
+  }
+  .popup__public > :last-child {
+    padding-left: var(--gutter);
+    border-left: var(--hair) solid var(--rule);
+  }
+  .popup__water {
+    flex: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+    padding: var(--space-4) var(--gutter);
+  }
+  .popup__actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+  .popup__deep {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 0 var(--gutter);
+    border-top: var(--hair) solid var(--rule);
+    overflow-y: auto;
+  }
+  .popup__deep-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 0.6875rem 0 0.375rem;
+    font-size: var(--text-fine);
+  }
+  .popup__deep-head h2 {
+    font-weight: var(--weight-strong);
+  }
+  .popup__deep-head a {
+    color: var(--text-2);
+  }
+  .popup__deep-head a:hover {
+    color: var(--text);
+  }
+  .popup__foot {
+    margin-top: auto;
+    padding: 0.4375rem 0 0.5625rem;
+    border-top: var(--hair) solid var(--rule);
+  }
+  .popup__view {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--space-4) var(--gutter);
+  }
+
+  /* ================================================================ 34 link */
+
+  /*
+    A link in running text needs no class: base.css underlines every <a>.
+    .link is for a <button> that reads as a link (the reset takes a button's
+    underline away) and for the quiet link that states a status at the end of a
+    row and acts on it.
+      <button class="link" type="button">Copy the address</button>
+      <a class="link link--quiet" href="#receive">Receive</a>
+      <button class="link link--quiet fig" type="button">Synced 14:02</button>
+      <button class="link link--quiet fig" type="button" aria-busy="true">Syncing</button>
+      <button class="link link--quiet link--caution" type="button"><svg class="icon">caution</svg>Cannot reach RPC</button>
+    .link--quiet    one size down, in the secondary ink; the full ink on hover.
+    .link--caution  the status is a caution: magenta, with the caution icon.
+    [aria-busy="true"]  working: the underline gives way to the working dashes.
+    :disabled or [aria-disabled="true"].
+    A status that carries a time also takes .fig, so its digits keep one width.
+    Say what pressing it does in title or aria-describedby, not in the label.
+  */
+  .link {
+    position: relative;
+    color: inherit;
+    text-decoration-line: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+    cursor: pointer;
+  }
+  .link:hover {
+    text-decoration-thickness: 2px;
+  }
+  .link:active {
+    color: var(--text-2);
+  }
+  .link > .icon {
+    display: inline-block;
+    width: 1.04em;
+    height: 1.04em;
+    margin-right: 0.3125rem;
+    vertical-align: -0.1em;
+  }
+  /* Its words keep the baseline of the row it ends. The icon has no baseline
+     of its own, so it is centred on the line and left out of the alignment. */
+  .link--quiet {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.3125rem;
+    font-size: var(--text-fine);
+    line-height: var(--leading-ui);
+    color: var(--text-2);
+    transition: color var(--dur-1);
+  }
+  .link--quiet > .icon {
+    align-self: center;
+    margin-right: 0;
+  }
+  .link--quiet:hover,
+  .link--quiet:active {
+    color: var(--text);
+  }
+  .link--caution,
+  .link--caution:hover,
+  .link--caution:active {
+    color: var(--caution);
+    font-weight: var(--weight-medium);
+  }
+  .link[aria-busy="true"] {
+    text-decoration-line: none;
+    cursor: progress;
+  }
+  .link[aria-busy="true"]::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 -0.25rem;
+    height: var(--line);
+    background: repeating-linear-gradient(90deg, currentColor 0 5px, transparent 5px 8px);
+    animation: loch-dashes var(--dur-dash) linear infinite;
+  }
+  .link:disabled,
+  .link[aria-disabled="true"] {
+    color: var(--text-disabled);
+    text-decoration-line: none;
+    cursor: not-allowed;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .link[aria-busy="true"]::after {
+      animation: none;
+    }
+  }
+  [data-motion="reduce"] .link[aria-busy="true"]::after {
+    animation: none;
+  }
+
+  /* ========================================================== 35 disclosure */
+
+  /*
+    Something most people can leave closed. A native <details>, so it opens
+    without JavaScript and from the keyboard.
+    <details class="disclosure">
+      <summary>
+        <svg class="icon icon--sm" aria-hidden="true"><use href="#i-chevron"/></svg>
+        <span>Use your own RPC</span>
+        <small>Default: api.devnet.solana.com</small>      optional: what is in use now
+      </summary>
+      <div class="disclosure__body">…</div>
+    </details>
+    The chevron points along the line when closed and down when open. Several
+    in a row share their rules. States: [open], summary :hover, :focus-visible.
+  */
+  .disclosure {
+    border-top: var(--hair) solid var(--rule);
+    border-bottom: var(--hair) solid var(--rule);
+  }
+  .disclosure + .disclosure {
+    border-top: 0;
+  }
+  .disclosure > summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--control-md);
+    font-size: var(--text-control);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-ui);
+    list-style: none;
+    cursor: pointer;
+  }
+  .disclosure > summary::-webkit-details-marker {
+    display: none;
+  }
+  .disclosure > summary:hover {
+    background: var(--wash);
+  }
+  .disclosure > summary > .icon {
+    color: var(--text-2);
+    transform: rotate(-90deg);
+    transition: transform var(--dur-2) var(--ease-settle);
+  }
+  .disclosure[open] > summary > .icon {
+    transform: none;
+  }
+  .disclosure > summary > span {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .disclosure > summary > small {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--text-fine);
+    font-weight: var(--weight-regular);
+    color: var(--text-2);
+    overflow-wrap: anywhere;
+    text-align: right;
+  }
+  /* Too narrow for both on one line: what is in use now goes under the label. */
+  @media (max-width: 34.99rem) {
+    .disclosure > summary {
+      flex-wrap: wrap;
+      row-gap: 0;
+      padding: var(--space-2) 0;
+    }
+    .disclosure > summary > small {
+      flex: 1 0 100%;
+      padding-left: calc(1rem + var(--space-2));
+      text-align: left;
+    }
+  }
+  .disclosure__body {
+    display: grid;
+    gap: calc(var(--stack-tight) + var(--space-1));
+    padding: var(--space-2) 0 calc(var(--row-y) + var(--space-1));
+  }
+  .disclosure__body > p {
+    max-width: var(--measure);
+    font-size: var(--text-small);
+    line-height: 1.55;
+    color: var(--text-2);
+  }
+
+  /* =========================================================== 36 pick list */
+
+  /*
+    A list of things to pick one of: the wallets found on a page, the wallets
+    on this device, the entries of a menu. Ruled rows, as activity is. A row is
+    a <button> or an <a>, and pressing it acts at once.
+    <ul class="picklist" aria-label="Wallets on this device">
+      <li><button class="picklist__row" type="button" aria-current="true">
+        <svg class="icon">check</svg>
+        <span class="picklist__name">Phantom <span class="picklist__note fig">Fh3q…Tz8K</span></span>
+        <span class="picklist__go">Showing</span>
+      </button></li>
+      <li><button class="picklist__row" type="button">
+        <svg class="icon">wallet</svg>
+        <span class="picklist__name">Solflare <span class="picklist__note fig">8sKp…Dn4Y</span></span>
+        <span class="picklist__go">Locked</span>
+      </button></li>
+    </ul>
+    .picklist__name  what the row is. One line, cut with an ellipsis.
+    .picklist__note  what tells it from the others, after the name: an address.
+    .picklist__go    what pressing it does, or the state it is in, at the end.
+    The icon is optional. States: :hover, :active, :focus-visible,
+    [aria-current="true"] (the one chosen now), :disabled or
+    [aria-disabled="true"]. For two or three exclusive settings use .segmented;
+    for a choice that is submitted with a form use .choice.
+  */
+  .picklist {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .picklist__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    min-height: var(--row-min);
+    padding: 0 var(--space-1) 0 0;
+    border-top: var(--hair) solid var(--rule);
+    color: var(--text);
+    font-size: var(--text-body);
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color var(--dur-1);
+  }
+  /* The last row carries the closing rule inside its own height, so every row is one --row-min. */
+  .picklist > :last-child > .picklist__row,
+  .picklist > .picklist__row:last-child {
+    border-bottom: var(--hair) solid var(--rule);
+  }
+  .picklist__row:hover {
+    background: var(--wash);
+  }
+  .picklist__row:active {
+    background: transparent;
+  }
+  .picklist__row > .icon {
+    color: var(--public);
+  }
+  .picklist__name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    font-weight: var(--weight-strong);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .picklist__note {
+    margin-left: 0.375rem;
+    font-weight: var(--weight-regular);
+    color: var(--text-2);
+  }
+  .picklist__go {
+    flex: none;
+    font-size: var(--text-fine);
+    color: var(--text-2);
+    transition: color var(--dur-1);
+  }
+  .picklist__row:hover .picklist__go,
+  .picklist__row[aria-current="true"] .picklist__go {
+    color: var(--text);
+  }
+  .picklist__row:disabled,
+  .picklist__row[aria-disabled="true"] {
+    background: transparent;
+    color: var(--text-disabled);
+    cursor: not-allowed;
+  }
+  .picklist__row:disabled > .icon,
+  .picklist__row:disabled .picklist__note,
+  .picklist__row:disabled .picklist__go,
+  .picklist__row[aria-disabled="true"] > .icon,
+  .picklist__row[aria-disabled="true"] .picklist__note,
+  .picklist__row[aria-disabled="true"] .picklist__go {
+    color: inherit;
+  }
+}
+
+@media (forced-colors: active) {
+  .btn,
+  .input,
+  .segmented,
+  .address-chip {
+    border-color: ButtonText;
+  }
+  .btn--primary,
+  .segmented > button[aria-checked="true"],
+  .segmented > button[aria-pressed="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+  .select::after,
+  .checkbox::before {
+    background: ButtonText;
+  }
+}

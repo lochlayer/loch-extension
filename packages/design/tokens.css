@@ -1,0 +1,360 @@
+/*
+  @loch/design / tokens.css
+
+  The page is a section through the loch. Land above one waterline holds what
+  is public; water below it steps darker at each depth contour down to the bed.
+  Upright lettering is public, italic lettering is shielded. Magenta is caution.
+
+  This file only declares custom properties. Three kinds, in this order:
+
+    1. Pigments      the inks. Same in every palette. Never use these directly
+                     in a component; use a role.
+    2. Palette       what the pigments are FOR in each palette ("dusk", the
+                     default, and "night"). Set with data-theme on <html> or on
+                     any element. There is no automatic prefers-color-scheme
+                     switch: dusk is already predominantly dark.
+    3. Ground roles  the tokens components read. They are set by the ground an
+                     element stands on: .land or .water (base.css). The root is
+                     water.
+
+  Then scale tokens: type (ratio 5:4), space (4px base), controls, borders,
+  radii, focus, motion, and the two densities.
+
+  Measured contrast for every pairing is in docs/design/DESIGN.md and is
+  checked by `pnpm --filter @loch/design run contrast`.
+*/
+
+@layer loch.tokens, loch.reset, loch.base, loch.components, loch.utilities;
+
+@layer loch.tokens {
+  /* ---------------------------------------------------------------- 1. Pigments */
+  :root {
+    --pigment-buff: #e4d8b4; /* Admiralty land tint */
+    --pigment-buff-lit: #efe6c9; /* buff, one step toward the light: hover on a buff fill */
+    --pigment-buff-worn: #d3c69c; /* buff, one step away from it: pressed */
+    --pigment-buff-dim: #b9ae8e; /* buff for secondary lettering on night land */
+    --pigment-ink: #0b1820; /* chart black */
+    --pigment-ink-lit: #1f313b; /* ink, hover on an ink fill */
+    --pigment-ink-soft: #3f4e55; /* secondary lettering on buff */
+    --pigment-midnight: #0a1420; /* land with the light gone: the sky over the loch at night, the water's own blue gone dark */
+    --pigment-midnight-lit: #15232f;
+    --pigment-midnight-haze: #10293a; /* that sky where it meets the water. For the website's sky only. */
+
+    /* Prussian blue, flat tints. Deeper is darker, as on Bartholomew's plates. */
+    --pigment-prussian-0: #17394a;
+    --pigment-prussian-20: #122e3d;
+    --pigment-prussian-60: #0e2532;
+    --pigment-prussian-120: #0a1d27;
+    --pigment-prussian-180: #08161e;
+    --pigment-prussian-230: #050f15;
+    --pigment-prussian-lit: #1f4b62; /* sunlit water: chart columns only */
+    --pigment-prussian-dusk: #356076; /* the sky at dusk where it meets the water. For the website's sky only. */
+
+    --pigment-loch: #a8d0e0; /* water lettering */
+    --pigment-paper: #e9eef0; /* body text on water */
+    --pigment-paper-dim: #9db3be; /* secondary text on water */
+    --pigment-paper-faint: #7a929e; /* disabled text on water */
+
+    --pigment-magenta: #e58abb; /* chart magenta, for dark grounds */
+    --pigment-magenta-deep: #9a1f66; /* chart magenta, for buff */
+  }
+
+  /* ---------------------------------------------------------------- 2. Palettes */
+
+  /* Dusk, the designed default: buff land over blue water. */
+  :root,
+  [data-theme="dusk"] {
+    color-scheme: dark;
+
+    /* Land: what is above the waterline. */
+    --land: var(--pigment-buff);
+    --land-raised: var(--pigment-buff-lit);
+    --land-ink: var(--pigment-ink);
+    --land-ink-2: var(--pigment-ink-soft);
+    --land-ink-disabled: #78786a;
+    --land-rule: rgb(11 24 32 / 0.22);
+    --land-rule-strong: rgb(11 24 32 / 0.55);
+    --land-wash: rgb(11 24 32 / 0.07);
+    --land-caution: var(--pigment-magenta-deep);
+    --land-action: var(--pigment-ink);
+    --land-action-hover: var(--pigment-ink-lit);
+    --land-action-active: #000a10;
+    --land-on-action: var(--pigment-buff);
+
+    /* Water, named by depth in metres. 0 is the surface, 230 is the bed of Loch Ness. */
+    --water-0: var(--pigment-prussian-0);
+    --water-20: var(--pigment-prussian-20);
+    --water-60: var(--pigment-prussian-60);
+    --water-120: var(--pigment-prussian-120);
+    --water-180: var(--pigment-prussian-180);
+    --bed: var(--pigment-prussian-230);
+
+    /* Lettering and line on water. */
+    --loch: var(--pigment-loch);
+    --paper: var(--pigment-paper);
+    --paper-2: var(--pigment-paper-dim);
+    --paper-disabled: var(--pigment-paper-faint);
+    --buff: var(--pigment-buff); /* public data and the primary action, on water */
+    --water-rule: rgb(168 208 224 / 0.24);
+    --water-rule-strong: rgb(168 208 224 / 0.46);
+    --water-rule-control: rgb(168 208 224 / 0.62);
+    --water-wash: rgb(168 208 224 / 0.08);
+    --water-sunk: rgb(5 15 21 / 0.5);
+    --water-caution: var(--pigment-magenta);
+
+    /* The waterline itself. Drawn in buff: under buff land it is simply the edge of the land. */
+    --waterline: var(--pigment-buff);
+
+    /* The caution band: one fill, the same on every ground. */
+    --caution-band: var(--pigment-magenta-deep);
+    --on-caution-band: var(--pigment-buff-lit);
+
+    /* Chart inks. */
+    --chart-water: var(--pigment-prussian-lit);
+    --chart-hatch: rgb(229 138 187 / 0.7);
+  }
+
+  /* Night: the same chart with the light gone. Land turns to midnight, the
+     water's own blue gone dark, and is lettered in buff; the waterline is
+     now a drawn buff line. Water, loch blue, paper and magenta do not
+     change. */
+  [data-theme="night"] {
+    color-scheme: dark;
+
+    --land: var(--pigment-midnight);
+    --land-raised: var(--pigment-midnight-lit);
+    --land-ink: var(--pigment-buff);
+    --land-ink-2: var(--pigment-buff-dim);
+    --land-ink-disabled: #857d66;
+    --land-rule: rgb(228 216 180 / 0.2);
+    --land-rule-strong: rgb(228 216 180 / 0.5);
+    --land-wash: rgb(228 216 180 / 0.08);
+    --land-caution: var(--pigment-magenta);
+    --land-action: var(--pigment-buff);
+    --land-action-hover: var(--pigment-buff-lit);
+    --land-action-active: var(--pigment-buff-worn);
+    --land-on-action: var(--pigment-ink);
+  }
+
+  /* ------------------------------------------------------------ 3. Ground roles */
+
+  /* The root stands in water. .land and .water (base.css) re-point these. */
+  :root,
+  [data-theme] {
+    --ground: var(--bed);
+    --field: var(--water-sunk);
+    --text: var(--paper);
+    --text-2: var(--paper-2);
+    --text-disabled: var(--paper-disabled);
+    --heading: var(--loch);
+    --public: var(--buff);
+    --shielded: var(--loch);
+    --rule: var(--water-rule);
+    --rule-strong: var(--water-rule-strong);
+    --rule-control: var(--water-rule-control);
+    --wash: var(--water-wash);
+    --caution: var(--water-caution);
+    --action: var(--pigment-buff);
+    --action-hover: var(--pigment-buff-lit);
+    --action-active: var(--pigment-buff-worn);
+    --on-action: var(--pigment-ink);
+    --focus: var(--pigment-buff);
+  }
+
+  /* --------------------------------------------------------------------- Type */
+  :root {
+    /* Old Standard TT: engraved map lettering, c. 1900. Roman and italic, 400 only.
+       Never bold. Never below --serif-min. */
+    --font-serif: "Old Standard TT", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    /* Libre Franklin: Franklin Gothic, 1902. Everything that is not display. */
+    --font-sans: "Libre Franklin", "Franklin Gothic Medium", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    /* Figures in columns: the digits come from Loch Tabular (Libre Franklin's
+       digits on one advance width); every other character falls through. */
+    --font-figures: "Loch Tabular", var(--font-sans);
+    /* Code only. Never for labels, addresses or decoration. */
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+
+    --weight-regular: 400;
+    --weight-medium: 500;
+    --weight-strong: 600;
+
+    /*
+      The scale. Ratio 5:4 (a major third), anchored at 14px, rounded to the
+      half pixel. Whole steps are --size-2, 4, 5, 6 ... ; text may also use the
+      two half steps (x 1.118) either side of the anchor, --size-1 and --size-3.
+      Display sizes use whole steps only.
+    */
+    --size-1: 0.78125rem; /* 12.5  step -1/2. The smallest type in the system. */
+    --size-2: 0.875rem; /*   14    step 0 */
+    --size-3: 0.96875rem; /* 15.5  step 1/2 */
+    --size-4: 1.09375rem; /* 17.5  step 1 */
+    --size-5: 1.375rem; /*   22    step 2. The floor for Old Standard TT. */
+    --size-6: 1.71875rem; /* 27.5  step 3 */
+    --size-7: 2.125rem; /*   34    step 4 */
+    --size-8: 2.6875rem; /*  43    step 5 */
+    --size-9: 3.34375rem; /* 53.5  step 6 */
+    --size-10: 4.1875rem; /* 67    step 7 */
+    --size-11: 5.21875rem; /* 83.5 step 8 */
+    --size-12: 6.5rem; /*    104   step 9 */
+
+    --serif-min: var(--size-5);
+
+    --leading-display: 1.04;
+    --leading-title: 1.12;
+    --leading-ui: 1.3;
+    --tracking-display: -0.012em;
+    --tracking-title: -0.005em;
+
+    /* Measures. */
+    --measure: 34em; /* running text: 60 to 68 characters */
+    --measure-wide: 46rem;
+    --page-max: 78rem; /* 1248px */
+  }
+
+  /* -------------------------------------------------------------------- Space */
+  :root {
+    /* 4px base. The number is the multiple of 4px. */
+    --space-05: 0.125rem; /*  2 */
+    --space-1: 0.25rem; /*    4 */
+    --space-2: 0.5rem; /*     8 */
+    --space-3: 0.75rem; /*   12 */
+    --space-4: 1rem; /*      16 */
+    --space-5: 1.25rem; /*   20 */
+    --space-6: 1.5rem; /*    24 */
+    --space-8: 2rem; /*      32 */
+    --space-10: 2.5rem; /*   40 */
+    --space-12: 3rem; /*     48 */
+    --space-16: 4rem; /*     64 */
+    --space-24: 6rem; /*     96 */
+    --space-32: 8rem; /*    128 */
+
+    /* ---------------------------------------------------- Borders and corners */
+    --hair: 1px; /* every rule, every control outline */
+    --line: 2px; /* the waterline, the bed line, the focus ring, the selected tab */
+
+    /* Corners. Structure (bands, rows, tables, figures, the popup) is square.
+       Controls take 2px, enough to stop a 1px outline looking chipped at 1x.
+       Nothing is ever a pill and nothing is ever a card. */
+    --radius-0: 0;
+    --radius-control: 2px;
+
+    /* ------------------------------------------------------------------ Focus */
+    --focus-width: 2px;
+    --focus-offset: 2px;
+
+    /* ----------------------------------------------------------------- Motion */
+    /* Motion only ever answers an action. Nothing moves on load or on scroll. */
+    --dur-1: 120ms; /* colour and border on hover, press */
+    --dur-2: 200ms; /* a small part moves: toggle, tab line, check */
+    --dur-3: 320ms; /* a surface arrives: sheet, dialog, toast */
+    --dur-sounding: 900ms; /* soundings dropping in the stepped bed, once, after a scan */
+    --dur-dash: 1600ms; /* one cycle of the working dashes */
+    --ease-settle: cubic-bezier(0.2, 0.7, 0.2, 1); /* arriving */
+    --ease-leave: cubic-bezier(0.5, 0, 0.9, 0.4); /* leaving */
+
+    /* The popup: 380 x 600, with its waterline this far below its top edge. */
+    --popup-land: 8.75rem; /* 140 */
+
+    /* Layers. */
+    --z-sticky: 10;
+    --z-sheet: 20;
+    --z-toast: 30;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --dur-1: 0.01ms;
+      --dur-2: 0.01ms;
+      --dur-3: 0.01ms;
+      --dur-sounding: 0.01ms;
+    }
+  }
+  /* The same switch by hand, for tests and for a user setting. */
+  [data-motion="reduce"] {
+    --dur-1: 0.01ms;
+    --dur-2: 0.01ms;
+    --dur-3: 0.01ms;
+    --dur-sounding: 0.01ms;
+  }
+
+  /* ---------------------------------------------------------------- Densities */
+
+  /*
+    Comfortable: the website, a long descent. The default.
+    Compact: the extension popup, 380 x 600. Set data-density="compact" on
+    <html> or on a container.
+    Components read only these role tokens, so the same markup works in both.
+  */
+  :root,
+  [data-density="comfortable"] {
+    --text-fine: var(--size-2); /*    14   captions, meta, legal */
+    --text-small: var(--size-3); /*   15.5 hints, table text, secondary */
+    --text-body: var(--size-4); /*    17.5 */
+    --text-lede: var(--size-5); /*    22 */
+    --text-label: var(--size-2); /*   14   field labels, table heads */
+    --text-control: var(--size-3); /* 15.5 buttons, inputs, tabs */
+    --text-title-3: var(--size-6); /* 27.5 */
+    --text-title-2: clamp(var(--size-7), 1.55rem + 2.1vw, var(--size-8));
+    --text-title-1: clamp(var(--size-8), 1.1rem + 5.4vw, var(--size-11));
+    --text-figure: clamp(var(--size-10), 3rem + 4vw, var(--size-12)); /* shielded balance, score */
+    --text-figure-2: var(--size-6); /* public balance, lesser figures */
+    --leading-body: 1.55;
+
+    --gutter: clamp(1rem, 4vw, 3rem);
+    --stack: var(--space-6); /* between blocks */
+    --stack-tight: var(--space-3); /* inside a block */
+    --row-y: var(--space-4); /* padding above and below a ruled row */
+    --row-min: 3.5rem;
+    --control-sm: 2.25rem; /* 36 */
+    --control-md: 2.75rem; /* 44 */
+    --control-lg: 3.25rem; /* 52 */
+    --control-x: var(--space-5);
+    --field-gap: var(--space-2);
+    --icon: 1.25rem; /* 20 */
+    --band-top: clamp(4.25rem, 2.6rem + 7vw, 6.5rem);
+    --band-bottom: clamp(4.75rem, 3rem + 7.6vw, 7.25rem);
+    --page-head-top: var(--space-8); /*    32 above the title of a sub-page */
+    --page-head-bottom: var(--space-10); /* 40 between it and the waterline */
+    --page-top: var(--space-12); /*        48 between the waterline and the text */
+  }
+  /* A sub-page's title has more room around it from 48rem up. */
+  @media (min-width: 48rem) {
+    :root,
+    [data-density="comfortable"] {
+      --page-head-top: var(--space-12);
+      --page-head-bottom: var(--space-12);
+    }
+  }
+
+  [data-density="compact"] {
+    --text-fine: var(--size-1); /*    12.5 */
+    --text-small: var(--size-1); /*   12.5 */
+    --text-body: var(--size-2); /*    14 */
+    --text-lede: var(--size-3); /*    15.5 */
+    --text-label: var(--size-1); /*   12.5 */
+    --text-control: var(--size-2); /* 14 */
+    --text-title-3: var(--size-5); /* 22 */
+    --text-title-2: var(--size-6); /* 27.5 */
+    --text-title-1: var(--size-7); /* 34 */
+    --text-figure: var(--size-10); /* 67 */
+    --text-figure-2: var(--size-6); /* 27.5 */
+    --leading-body: 1.4;
+
+    --gutter: var(--space-4);
+    --stack: var(--space-3);
+    --stack-tight: var(--space-2);
+    --row-y: var(--space-2);
+    --row-min: 2.5rem;
+    --control-sm: 1.75rem; /* 28 */
+    --control-md: 2.25rem; /* 36 */
+    --control-lg: 2.75rem; /* 44 */
+    --control-x: var(--space-3);
+    --field-gap: 0.375rem;
+    --icon: 1.125rem; /* 18 */
+    --band-top: var(--space-4);
+    --band-bottom: var(--space-4);
+    --page-head-top: var(--space-3);
+    --page-head-bottom: var(--space-4);
+    --page-top: var(--space-4);
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // WebWorker, not DOM and not Node: the code has to run in a page, in an
+    // extension service worker and in Node alike, so only APIs common to all
+    // three may typecheck. "types": [] keeps @types/node out. Tests are
+    // checked separately (test/tsconfig.json) because they do run in Node.
+    "lib": ["ES2022", "WebWorker"],
+    "types": [],
+    "noEmit": true
+  },
+  "include": ["src"]
+}

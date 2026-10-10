@@ -1,0 +1,359 @@
+/*
+  The extension's own styles. Everything visual comes from @loch/design; this file only lays
+  the popup and the expanded view out and adds the few arrangements the package has no
+  component for. Unlayered, so it sits above the package's cascade layers.
+
+  Components that used to live here are the package's now: the balance row, .link--quiet (the
+  sync status, Receive), .is-unsurveyed, .picklist, .reasons.
+*/
+
+/* The body font, its size and its leading are the design system's (base.css says them once more
+   outside its layers, so Chrome's own stylesheet for extension pages cannot override them). */
+html,
+body {
+  margin: 0;
+}
+body {
+  min-height: 0;
+  background: var(--water-120);
+}
+#app {
+  display: contents;
+}
+
+/* ------------------------------------------------------------------- popup */
+html[data-view="popup"],
+html[data-view="popup"] body {
+  width: 380px;
+  height: 600px;
+  overflow: hidden;
+}
+
+.activity__amount.is-void {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.activity__amount[data-pending] {
+  opacity: 1;
+}
+
+/* ----------------------------------------------------------------- welcome */
+.welcome__land {
+  margin-top: auto;
+  padding: var(--space-2) var(--gutter) 0.07em;
+  font-family: var(--font-serif);
+  font-size: var(--text-title-1);
+  line-height: 1.02;
+  letter-spacing: var(--tracking-display);
+  color: var(--land-ink);
+}
+.welcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-top: 0;
+}
+.welcome__water {
+  margin-left: -0.02em;
+  padding-top: 0.1em;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--text-title-1);
+  line-height: 1.02;
+  letter-spacing: var(--tracking-display);
+  color: var(--loch);
+}
+.welcome__status dd {
+  font-weight: var(--weight-medium);
+}
+.welcome > .welcome__status {
+  margin-top: auto;
+}
+.welcome > .welcome__action {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* ------------------------------------------------------------------ sheets */
+.sheet:focus {
+  outline: none;
+}
+.sheet__body > form.stack {
+  margin: 0;
+}
+.sheet .observer {
+  max-width: none;
+}
+.sheet .notice__title .icon,
+.popup__view .notice__title .icon,
+.wide .notice__title .icon {
+  width: 1rem;
+  height: 1rem;
+}
+.progress__stages[data-count="5"] {
+  font-size: var(--size-1);
+}
+.input-group > textarea.input {
+  min-height: 0;
+  padding-block: 0.4375rem;
+  line-height: 1.4;
+  resize: none;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.input-group:has(textarea) {
+  align-items: flex-start;
+}
+.input-group:has(textarea) > .btn,
+.input-group:has(textarea) > .input-group__ok {
+  margin-top: 0.25rem;
+}
+.input-group__ok {
+  display: inline-flex;
+}
+.deflist--kv dd .t-quiet {
+  font-style: normal;
+}
+
+/* ------------------------------------------------------------------- views */
+.view-head {
+  padding-top: 0;
+  padding-bottom: var(--space-3);
+}
+.view-head h2 {
+  font-size: var(--text-body);
+}
+.popup__view > * + *,
+.wide__panel > * + *,
+.report-view > * + *,
+.settings > * + * {
+  margin-top: var(--stack);
+}
+.view-legend {
+  padding-top: var(--space-2);
+  border-top: var(--hair) solid var(--rule);
+}
+.activity--full > li {
+  display: grid;
+}
+.activity--full > li:last-child {
+  border-bottom: var(--hair) solid var(--rule);
+}
+.activity--full button.activity__row {
+  width: 100%;
+  text-align: left;
+}
+.activity__detail {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-1) 0 var(--space-4) calc(var(--icon) + var(--space-3));
+  font-size: var(--text-small);
+  line-height: 1.5;
+}
+.copy-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--public);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+.receive {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+.receive__address {
+  width: 100%;
+  padding: var(--space-3) 0;
+  border-top: var(--hair) solid var(--rule);
+  border-bottom: var(--hair) solid var(--rule);
+  font-weight: var(--weight-medium);
+}
+.receive__code {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  width: 100%;
+  margin-top: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: var(--hair) solid var(--rule);
+}
+.receive__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.report-view__verdict {
+  color: var(--text-2);
+}
+.settings > .settings__section:first-of-type {
+  margin-top: 0;
+}
+.settings__section {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: var(--hair) solid var(--rule);
+}
+.settings__section > form,
+.settings__section > .stack,
+.settings__section > .deflist,
+.settings__section > .notice {
+  width: 100%;
+}
+.settings__title {
+  font-size: var(--text-body);
+  font-weight: var(--weight-strong);
+  line-height: 1.3;
+}
+.settings .hash {
+  font-size: var(--text-fine);
+  color: var(--text-2);
+}
+.settings .choice small {
+  margin-top: 0.125rem;
+  line-height: 1.45;
+}
+
+/* ---------------------------------------------------------- expanded view */
+html[data-view="wide"] body {
+  min-height: 100vh;
+}
+.wide {
+  --column: 380px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--water-120);
+  color: var(--paper);
+}
+.wide > .caution-band {
+  position: relative;
+  z-index: calc(var(--z-sheet) + 1);
+}
+/* Band and land together are as tall as the popup's land, so the waterline is in the same place. */
+.wide__land {
+  display: grid;
+  grid-template-columns: var(--column) minmax(0, 1fr);
+  min-height: calc(var(--popup-land) - 1.875rem - var(--line));
+}
+.wide__land-left {
+  display: flex;
+  flex-direction: column;
+}
+.wide__land-right {
+  display: flex;
+  align-items: flex-end;
+  padding: 0 var(--space-8);
+  border-left: var(--hair) solid var(--rule);
+}
+.wide__land-right .tabs {
+  flex: 1;
+  gap: var(--space-6);
+  border-bottom: 0;
+}
+/* The selected tab stands on the waterline itself. */
+.wide__land-right .tabs__tab::after {
+  bottom: 0;
+}
+.wide__water {
+  flex: 1;
+  display: grid;
+  grid-template-columns: var(--column) minmax(0, 1fr);
+  min-height: 0;
+}
+.wide__column {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 28.75rem;
+  overflow: hidden;
+}
+.wide__column > .popup__deep {
+  border-bottom: 0;
+}
+.wide__column > .popup__view {
+  flex: 1;
+}
+.wide__panel {
+  min-width: 0;
+  padding: var(--space-6) var(--space-8) var(--space-12);
+  border-left: var(--hair) solid var(--rule);
+}
+.wide__panel > *,
+.wide__panel .report-view > *,
+.wide__panel .settings > * {
+  max-width: 47.5rem;
+}
+.wide__panel .view-head h2 {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--size-6);
+  font-weight: var(--weight-regular);
+  line-height: 1.18;
+  color: var(--loch);
+}
+.wide__panel .view-head {
+  padding-bottom: var(--space-4);
+}
+.wide__panel .report-view__figures {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-8);
+  padding-top: var(--space-4);
+}
+.report-view__top {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+  gap: var(--space-8);
+  align-items: start;
+}
+.report-view__top .score {
+  gap: var(--space-3);
+}
+.report-view__chart {
+  display: grid;
+  gap: var(--space-4);
+  justify-items: start;
+}
+.report-view__chart > .chart {
+  width: 100%;
+}
+.wide__column .receive {
+  padding-bottom: var(--space-4);
+}
+.wide__column .receive__address {
+  border-top: 0;
+  padding-top: 0;
+}
+.wide__intro {
+  display: grid;
+  gap: var(--space-8);
+}
+.wide__intro .steps {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-8);
+}
+.wide__intro .step > * {
+  padding-right: 0;
+}
+@media (max-width: 47.5rem) {
+  .wide__land,
+  .wide__water {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wide__land-right {
+    padding: 0 var(--gutter);
+    border-left: 0;
+  }
+  .wide__panel {
+    padding: var(--space-5) var(--gutter) var(--space-10);
+    border-left: 0;
+    border-top: var(--hair) solid var(--rule);
+  }
+}

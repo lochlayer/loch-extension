@@ -1,0 +1,62 @@
+{
+  "name": "@loch/rpc-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser-safe client for the Loch RPC proxy: Oblivious HTTP (RFC 9458) fetch, key configuration pinning and a web3.js Connection helper.",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "default": "./dist/protocol.js"
+    },
+    "./web3": {
+      "types": "./dist/web3.d.ts",
+      "default": "./dist/web3.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "tsc -p tsconfig.build.json || echo \"@loch/rpc-client: build skipped, run pnpm build\"",
+    "typecheck": "tsc --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hpke/chacha20poly1305": "^1.8.0",
+    "@hpke/common": "^1.10.1",
+    "@hpke/core": "^1.9.0",
+    "@hpke/dhkem-x25519": "^1.8.0",
+    "@hpke/hybridkem-x-wing": "^0.7.0"
+  },
+  "peerDependencies": {
+    "@solana/web3.js": "^1.98.0"
+  },
+  "peerDependenciesMeta": {
+    "@solana/web3.js": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@noble/post-quantum": "0.7.1",
+    "@solana/web3.js": "^1.98.0",
+    "@types/node": "^22.0.0",
+    "bhttp-js": "0.3.6",
+    "esbuild": "^0.28.2",
+    "ohttp-js": "0.1.5",
+    "typescript": "^5.7.0",
+    "vitest": "^5.0.0"
+  }
+}

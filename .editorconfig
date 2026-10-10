@@ -1,0 +1,26 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.{rs,circom,py}]
+indent_size = 4
+
+# scripts/setup-devnet.sh predates this and uses 2.
+[*.sh]
+indent_size = 4
+
+# Two trailing spaces are a line break in Markdown.
+[*.md]
+trim_trailing_whitespace = false
+
+# Generated or byte-exact files: leave them as their generator wrote them.
+[{pnpm-lock.yaml,Cargo.lock,circuits/artifacts/**,docs/design/system/**,tests/bench/results/**,programs/loch_pool/src/verifying_key.rs}]
+indent_size = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset

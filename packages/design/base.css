@@ -1,0 +1,549 @@
+/*
+  @loch/design / base.css
+
+  Reset, document defaults, the two grounds (.land, .water), the lettering
+  rule (.is-public, .is-shielded), type roles, numerals, links, focus,
+  selection and a few layout primitives.
+
+  Everything is in a cascade layer, so any unlayered rule in an app wins
+  without a specificity fight. There is one exception, at the foot of this
+  file: the body's font is also said outside the layers, because the
+  stylesheet Chrome adds to every extension page would otherwise replace it.
+*/
+
+@layer loch.tokens, loch.reset, loch.base, loch.components, loch.utilities;
+
+/* ------------------------------------------------------------------- Reset */
+@layer loch.reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    tab-size: 2;
+  }
+
+  body,
+  h1,
+  h2,
+  h3,
+  h4,
+  p,
+  figure,
+  blockquote,
+  dl,
+  dd,
+  ol,
+  ul,
+  pre,
+  fieldset,
+  legend {
+    margin: 0;
+    padding: 0;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font: inherit;
+  }
+
+  ol,
+  ul {
+    list-style: none;
+  }
+
+  img,
+  svg,
+  canvas,
+  video {
+    display: block;
+    max-width: 100%;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    margin: 0;
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+  }
+
+  button {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    cursor: pointer;
+  }
+
+  fieldset {
+    min-width: 0;
+    border: 0;
+  }
+
+  table {
+    border-collapse: collapse;
+    border-spacing: 0;
+  }
+
+  th,
+  td {
+    padding: 0;
+    text-align: left;
+    font-weight: inherit;
+    vertical-align: top;
+  }
+
+  hr {
+    height: 0;
+    margin: 0;
+    border: 0;
+    color: inherit;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+}
+
+@layer loch.base {
+  /* ------------------------------------------------------ Document defaults */
+  html {
+    background: var(--bed);
+    scroll-padding-top: var(--space-6);
+  }
+
+  body {
+    min-height: 100vh;
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    font-weight: var(--weight-regular);
+    line-height: var(--leading-body);
+    font-variant-numeric: lining-nums;
+    font-synthesis: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* A density set on a container re-sets the running text inside it. Never on
+     the root itself: that would change the size of a rem, and every token with it. */
+  [data-density]:not(:root) {
+    font-size: var(--text-body);
+    line-height: var(--leading-body);
+  }
+
+  /* ---------------------------------------------------------------- Grounds */
+
+  /*
+    .land   above the waterline. Holds what is public. Lettered upright.
+    .water  below it. Add data-depth="0|20|60|120|180|bed" to choose the tint.
+            Deeper is darker. Depth only ever increases down the page.
+    Each ground re-points the role tokens that components read.
+  */
+  .land {
+    --ground: var(--land);
+    --field: var(--land-raised);
+    --text: var(--land-ink);
+    --text-2: var(--land-ink-2);
+    --text-disabled: var(--land-ink-disabled);
+    --heading: var(--land-ink);
+    --heading-style: normal;
+    --public: var(--land-ink);
+    --shielded: var(--land-ink);
+    --rule: var(--land-rule);
+    --rule-strong: var(--land-rule-strong);
+    --rule-control: var(--land-rule-strong);
+    --wash: var(--land-wash);
+    --caution: var(--land-caution);
+    --action: var(--land-action);
+    --action-hover: var(--land-action-hover);
+    --action-active: var(--land-action-active);
+    --on-action: var(--land-on-action);
+    --focus: var(--land-ink);
+    background-color: var(--ground);
+    color: var(--text);
+  }
+
+  .water {
+    --ground: var(--water-0);
+    --field: var(--water-sunk);
+    --text: var(--paper);
+    --text-2: var(--paper-2);
+    --text-disabled: var(--paper-disabled);
+    --heading: var(--loch);
+    --heading-style: italic;
+    --public: var(--buff);
+    --shielded: var(--loch);
+    --rule: var(--water-rule);
+    --rule-strong: var(--water-rule-strong);
+    --rule-control: var(--water-rule-control);
+    --wash: var(--water-wash);
+    --caution: var(--water-caution);
+    --action: var(--pigment-buff);
+    --action-hover: var(--pigment-buff-lit);
+    --action-active: var(--pigment-buff-worn);
+    --on-action: var(--pigment-ink);
+    --focus: var(--pigment-buff);
+    background-color: var(--ground);
+    color: var(--text);
+  }
+  .water[data-depth="0"] {
+    --ground: var(--water-0);
+  }
+  .water[data-depth="20"] {
+    --ground: var(--water-20);
+  }
+  .water[data-depth="60"] {
+    --ground: var(--water-60);
+  }
+  .water[data-depth="120"] {
+    --ground: var(--water-120);
+  }
+  .water[data-depth="180"] {
+    --ground: var(--water-180);
+  }
+  .water[data-depth="bed"] {
+    --ground: var(--bed);
+  }
+
+  :root {
+    --heading-style: italic;
+  }
+
+  /* --------------------------------------------------- The lettering rule */
+
+  /*
+    Upright is public. Italic is shielded. This is an encoding, not a style.
+
+    .is-public    anyone reading the chain can see this. Upright. Buff on
+                  water, ink on land.
+    .is-shielded  only the holder can see this. Italic, loch blue.
+
+    At text sizes the italic is Libre Franklin's, at medium weight, because
+    Old Standard's italic is too thin to read below 22px on a 1x display.
+    At display sizes (.t-display-*, .figure, .sounding) the italic is Old
+    Standard's. The slope carries the meaning at every size; the serif is
+    only the voice it has when it is large.
+  */
+  :where(.is-public) {
+    font-style: normal;
+    color: var(--public);
+  }
+  :where(.is-shielded) {
+    font-style: italic;
+    font-weight: var(--weight-medium);
+    color: var(--shielded);
+  }
+
+  /* -------------------------------------------------------------- Type roles */
+
+  /* Display: Old Standard TT. Follows the ground: upright on land, italic in
+     water. Never bold, never below --serif-min. */
+  .t-display-1,
+  .t-display-2,
+  .t-display-3 {
+    font-family: var(--font-serif);
+    font-weight: var(--weight-regular);
+    font-style: var(--heading-style);
+    color: var(--heading);
+    text-wrap: balance;
+  }
+  .t-display-1 {
+    font-size: max(var(--serif-min), var(--text-title-1));
+    line-height: var(--leading-display);
+    letter-spacing: var(--tracking-display);
+  }
+  .t-display-2 {
+    font-size: max(var(--serif-min), var(--text-title-2));
+    line-height: var(--leading-title);
+    letter-spacing: var(--tracking-title);
+  }
+  .t-display-3 {
+    font-size: max(var(--serif-min), var(--text-title-3));
+    line-height: 1.18;
+  }
+  /* A display heading that names something public while standing in water. */
+  .t-display-1.is-public,
+  .t-display-2.is-public,
+  .t-display-3.is-public {
+    font-style: normal;
+    color: var(--public);
+  }
+
+  .t-lede {
+    max-width: var(--measure);
+    font-size: var(--text-lede);
+    line-height: 1.45;
+    text-wrap: pretty;
+  }
+  .t-body {
+    max-width: var(--measure);
+    font-size: var(--text-body);
+    line-height: var(--leading-body);
+    text-wrap: pretty;
+  }
+  .t-small {
+    font-size: var(--text-small);
+    line-height: 1.5;
+  }
+  .t-fine {
+    font-size: var(--text-fine);
+    line-height: 1.45;
+    color: var(--text-2);
+  }
+  .t-label {
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-ui);
+  }
+  .t-quiet {
+    color: var(--text-2);
+  }
+  .t-caution {
+    color: var(--caution);
+  }
+
+  strong,
+  b {
+    font-weight: var(--weight-strong);
+  }
+
+  /* ---------------------------------------------------------------- Numerals */
+
+  /*
+    .fig        any figure that can sit in a column: amounts, balances in
+                lists, scores in tables, addresses, times. Tabular lining
+                digits, never wrapped.
+    .fig-sign   the + or the true minus (U+2212). Always upright sans, even on
+                a shielded amount, with a hair of space after it.
+    .fig-unit   the unit, after a no-break space: upright sans, strong, small.
+    .figure     a display figure in the serif (public: roman, shielded: italic).
+    .sounding   the shielded balance written as a chart writes a depth: whole
+                number at full size, fraction at half size and dropped.
+                <span class="sounding"><span>12</span><span class="sounding__frac">.480</span></span>
+                An amount that is not zero but too small to show is <0.001,
+                never 0.000: <span class="sounding__less">&lt;</span> goes first.
+  */
+  .fig {
+    font-family: var(--font-figures);
+    font-variant-numeric: lining-nums tabular-nums;
+    font-feature-settings: "liga" 0;
+    white-space: nowrap;
+  }
+  .fig-sign {
+    display: inline-block;
+    min-width: 0.62em;
+    margin-right: 0.06em;
+    font-family: var(--font-sans);
+    font-style: normal;
+    text-align: center;
+  }
+  .fig-unit {
+    font-family: var(--font-sans);
+    font-style: normal;
+    font-size: var(--text-fine);
+    font-weight: var(--weight-strong);
+    letter-spacing: 0.01em;
+    color: var(--text-2);
+  }
+
+  .figure {
+    font-family: var(--font-serif);
+    font-weight: var(--weight-regular);
+    font-size: max(var(--serif-min), var(--text-figure-2));
+    font-variant-numeric: lining-nums;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+  .figure.is-public {
+    font-style: normal;
+    color: var(--public);
+  }
+  .figure.is-shielded {
+    font-style: italic;
+    color: var(--shielded);
+  }
+  .figure--xl {
+    font-size: var(--text-figure);
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+  }
+
+  .sounding {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: var(--weight-regular);
+    font-size: max(2 * var(--serif-min), var(--text-figure));
+    font-variant-numeric: lining-nums;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    color: var(--shielded);
+  }
+  .sounding__frac {
+    position: relative;
+    top: 0.16em;
+    margin-left: 0.03em;
+    font-size: 0.5em;
+    letter-spacing: 0;
+  }
+  /* The "less than" of a balance too small to show (<0.001): before the whole
+     number, at the fraction's size, so the large figure is still the whole
+     number and is not read as "less than nothing". */
+  .sounding__less {
+    margin-right: 0.1em;
+    font-size: 0.5em;
+    letter-spacing: 0;
+  }
+
+  /* ------------------------------------------------------------------- Links */
+  a {
+    color: inherit;
+    text-decoration-line: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+    text-decoration-skip-ink: auto;
+  }
+  a:hover {
+    text-decoration-thickness: 2px;
+  }
+  a:active {
+    color: var(--text-2);
+  }
+
+  /* ------------------------------------------------------------------- Focus */
+  :focus {
+    outline: none;
+  }
+  :focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: var(--focus-offset);
+    border-radius: var(--radius-control);
+  }
+
+  /* --------------------------------------------------------------- Selection */
+  ::selection {
+    background: var(--pigment-loch);
+    color: var(--pigment-ink);
+  }
+  .land ::selection,
+  .land::selection {
+    background: var(--land-ink);
+    color: var(--land);
+  }
+  .water ::selection,
+  .water::selection {
+    background: var(--pigment-loch);
+    color: var(--pigment-ink);
+  }
+
+  /* ------------------------------------------------------------------- Code */
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+  }
+
+  /* ------------------------------------------------------------------ Layout */
+
+  /* The page column: 1248px, gutters 16 to 48px. Everything is left-aligned. */
+  .wrap {
+    width: min(100% - 2 * var(--gutter), var(--page-max));
+    margin-inline: auto;
+  }
+
+  /* Vertical rhythm between siblings. */
+  .stack > * + * {
+    margin-top: var(--stack);
+  }
+  .stack--tight > * + * {
+    margin-top: var(--stack-tight);
+  }
+
+  /* A row of things with a gap that wraps. */
+  .cluster {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+}
+
+@layer loch.utilities {
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .skip-link {
+    position: absolute;
+    left: var(--gutter);
+    top: -5rem;
+    z-index: var(--z-toast);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-control);
+    background: var(--pigment-ink);
+    color: var(--pigment-buff);
+    font-weight: var(--weight-strong);
+    text-decoration: none;
+  }
+  .skip-link:focus {
+    top: var(--space-3);
+    outline: var(--focus-width) solid var(--pigment-buff);
+    outline-offset: var(--focus-offset);
+  }
+}
+
+/* ------------------------------------------- Outside the layers, on purpose */
+
+/*
+  Chrome gives every extension page (a popup, an options page, any
+  chrome-extension:// document) a stylesheet of its own:
+
+      body { font-family: <the system's font>; font-size: 75%; }
+
+  It is an author stylesheet, injected ahead of the page's own, and it is in
+  no layer. An unlayered rule beats every layered one whatever its
+  specificity, so the layered body rule above loses to it and the page is set
+  in a 12px fallback face.
+
+  So the same two declarations are said once more here, unlayered and no more
+  specific than Chrome's rule. They win by coming later. Nothing else in the
+  package is outside the layers.
+
+  For an app this changes one thing. Its own unlayered `body { font-family }`
+  or `body { font-size }` still wins when it comes after this file (the usual
+  order: import the design system first) or is more specific. Only a rule of
+  the same specificity placed before this file now loses.
+*/
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+}

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>A site that uses your wallet</title>
+    <style nonce="fixture">
+      body { margin: 2rem; font: 16px/1.5 system-ui, sans-serif; background: #f6f6f3; color: #111; }
+      button { display: block; margin: 0.5rem 0; padding: 0.5rem 0.75rem; font: inherit; }
+      pre { padding: 0.75rem; background: #fff; border: 1px solid #ccc; white-space: pre-wrap; overflow-wrap: anywhere; }
+    </style>
+  </head>
+  <body>
+    <h1>A site that uses your wallet</h1>
+    <p>A test fixture: an ordinary web app that finds wallets through the Wallet Standard and asks the one named in <code>?wallet=</code> to sign.</p>
+    <p>Wallets on this page: <span id="wallets"></span></p>
+    <button id="connect">Connect</button>
+    <button id="sign-derivation">Sign &ldquo;Loch key derivation v1&rdquo;</button>
+    <button id="sign-hidden">Sign a message that contains it</button>
+    <button id="sign-hello">Sign &ldquo;hello&rdquo;</button>
+    <button id="sign-transfer">Sign a transfer of 0.2 SOL</button>
+    <button id="sign-transfer-new">Sign a transfer of 0.1 SOL to a new address</button>
+    <button id="sign-memo">Sign a transaction with no transfer</button>
+    <button id="sign-garbage">Sign bytes that are not a transaction</button>
+    <pre id="out" aria-live="polite"></pre>
+    <script src="/dapp.js"></script>
+  </body>
+</html>

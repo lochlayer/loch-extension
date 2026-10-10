@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="loch-mark-n-t">
+  <title id="loch-mark-n-t">Loch</title>
+  <!--
+    Nessie in section. The tile is the first screen in small: the night sky above
+    the waterline, the water below it, and the line itself in buff. She is one
+    silhouette, counterchanged where the line cuts her: buff where she is exposed,
+    loch blue where she is not. Only her head and neck are above the line.
+    She is whole inside the tile: her tail ends in its own tip, and nothing of her is cut by the edge.
+    The same drawing as mark.svg. The tile is dark, so it stands on the night sky, on water and on buff alike.
+    Drawn by scripts/draw-mark.mjs from mark/source/nessie.svg. Change it there, not here.
+  -->
+  <defs>
+    <clipPath id="loch-mark-n-tile"><rect width="64" height="64" rx="8"/></clipPath>
+    <clipPath id="loch-mark-n-dry"><rect width="64" height="28"/></clipPath>
+    <clipPath id="loch-mark-n-wet"><rect y="28" width="64" height="36"/></clipPath>
+    <g id="loch-mark-n-n" fill="currentColor">
+      <path d="M49.16 9.83C50.06 9.72 50.99 9.97 51.76 10.44C52.62 10.97 53.62 11.93 53.86 12.95C54 13.55 53.95 14.18 53.61 14.7C52.95 15.74 51.54 16.1 50.4 16.19C49.96 16.22 49.51 16.19 49.09 16.29C48.61 16.4 48.24 16.67 47.99 17.08C46.54 19.46 48.66 25.1 49.46 27.57C49.8 28.57 50.09 29.59 50.35 30.61C51.12 33.75 51.12 36.93 49.38 39.75C47.86 42.22 45.53 43.86 42.73 44.54C42.15 46.12 41.02 47.45 39.55 48.26C38.52 48.85 37.38 49.18 36.21 49.35C35.94 49.39 35.62 49.46 35.35 49.37C35.2 49.33 35.06 49.23 34.99 49.08C34.67 48.38 35.25 45.91 35.51 45.13C33.01 45.24 31.35 45.09 28.9 44.55C27.98 46.26 26.47 47.43 24.62 48.03C23.83 48.25 22.62 48.63 21.83 48.42C21.44 48.31 21.51 47.45 21.53 47.12C21.62 45.62 21.98 44.19 22.75 42.89C22.56 42.94 22.47 42.97 22.29 43.04C21.92 43.22 21.29 43.69 20.9 43.92C19.75 44.61 18.51 45.12 17.21 45.44C15.11 45.94 13.03 45.91 10.94 45.35C10.56 45.26 10.09 45.19 10.03 44.72C10 44.49 10.11 44.27 10.3 44.15C10.5 44.03 11.73 43.88 12.11 43.79C12.74 43.65 13.37 43.47 13.98 43.24C16.92 42.12 19.03 40.07 20.98 37.67C21.91 36.52 22.93 35.52 24.13 34.65C28.32 31.57 33.83 30.99 38.57 33.11C39.17 33.38 39.75 33.69 40.3 34.03C41.24 34.62 42.42 35.74 43.6 35.61C43.96 35.57 44.25 35.39 44.47 35.1C45.81 33.34 44.64 28.06 44.28 26C44.07 24.85 43.89 23.69 43.75 22.53C43.36 19.16 43.36 14.66 45.56 11.82C46.45 10.67 47.71 9.99 49.16 9.83z"/>
+    </g>
+  </defs>
+  <g clip-path="url(#loch-mark-n-tile)">
+    <rect width="64" height="28" fill="#0A1420"/>
+    <rect y="28" width="64" height="36" fill="#17394A"/>
+    <use href="#loch-mark-n-n" color="#E4D8B4" clip-path="url(#loch-mark-n-dry)"/>
+    <use href="#loch-mark-n-n" color="#A8D0E0" clip-path="url(#loch-mark-n-wet)"/>
+    <path d="M49.7 11.88C50.01 11.81 50.33 12 50.4 12.31C50.48 12.62 50.29 12.94 49.98 13.02C49.78 13.08 49.56 13.02 49.41 12.86C49.26 12.71 49.21 12.49 49.27 12.29C49.33 12.08 49.5 11.93 49.7 11.88z" fill="#0A1420" stroke="#0A1420" stroke-width="0.4"/>
+    <rect y="27.4" width="64" height="1.2" fill="#E4D8B4"/>
+  </g>
+  <rect x=".5" y=".5" width="63" height="63" rx="7.5" fill="none" stroke="#E4D8B4" stroke-opacity=".22"/>
+</svg>

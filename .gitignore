@@ -1,0 +1,17 @@
+node_modules/
+dist/
+dist-mainnet/
+dist-e2e/
+dist-stories/
+*.tsbuildinfo
+.e2e/
+.results/
+test-results/
+coverage/
+apps/*/shots/
+packages/*/shots/
+.env
+.env.*
+*-keypair.json
+*keypair*.json
+.DS_Store

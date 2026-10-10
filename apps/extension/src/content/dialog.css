@@ -1,0 +1,64 @@
+/*
+  Additions for the in-page dialog. Appended to the design system's CSS by the build, then
+  rewritten for a shadow root (:root becomes :host, rem becomes px). Unlayered, so these win.
+*/
+:host {
+  --font-sans: "Loch Dialog Sans", "Franklin Gothic Medium", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-figures: "Loch Dialog Sans", "Franklin Gothic Medium", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+.loch-frame {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  font-weight: 400;
+  font-style: normal;
+  line-height: var(--leading-body);
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  color: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+.loch-frame .scrim {
+  position: fixed;
+}
+.loch-frame .dialog {
+  position: relative;
+  z-index: 21;
+  display: flex;
+  flex-direction: column;
+  width: min(100% - 2rem, 27.5rem);
+  max-height: calc(100% - 2rem);
+  margin: 0;
+}
+.loch-frame .dialog .caution-band {
+  --caution-band-x: 1.5rem;
+}
+.loch-frame .dialog .failure {
+  padding-top: 0.75rem;
+  padding-bottom: 0;
+}
+.loch-frame .dialog .failure__title {
+  align-items: flex-start;
+}
+.loch-frame .dialog .failure__title .icon {
+  margin-top: 0.1em;
+}
+.loch-frame .deflist--kv dd {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+.loch-frame .statement__row > .sev + .statement__what {
+  grid-row: 2;
+}
+.loch-frame .observer {
+  max-width: none;
+}
+.loch-frame .dialog:focus {
+  outline: none;
+}
