@@ -70,6 +70,10 @@ The build checks the two prover files against their recorded SHA-256 and stops i
 | Hosts of the default RPC endpoint, relayer and screening service | The three services the extension talks to. Another address is asked for one origin at a time, when you save it in settings |
 | Content scripts on all sites | The Loch wallet a site is offered, and the warning dialog. The scripts read nothing of a page |
 
+## Token
+
+The $LOCH token is not live yet. When it is, its address will be `CYGidBuS8WwUXfZCmb98LnLGL9Mx8SvhdqA6t3xTLoch`. Nothing is deployed there today and nothing is for sale. A token at any other address is not ours.
+
 ## Licence
 
 Copyright © 2026 Loch. All rights reserved. The source is published to be read, reviewed and checked against the released builds. It may not be copied, modified or redistributed without written permission. See [`LICENSE`](LICENSE). Third-party components keep their own licences.
