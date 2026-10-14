@@ -1,0 +1,31 @@
+Loch browser extension
+Copyright (C) 2026 Loch (lochlayer.com)
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, version 3 of the License.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+The full text of the License is in the file LICENSE.
+
+
+Name, mascot and marks
+
+The License covers the source code. It does not grant any right to the name
+"Loch", to the mascot or to the logo, and the files in packages/design/mark are
+not licensed under it: they are (C) 2026 Loch, all rights reserved. You may
+redistribute them unchanged as part of an unmodified copy or build of this
+program. A modified version must be given a different name and must not use
+these files, so that nobody takes it for the original (section 7(c) and 7(e) of
+the License).
+
+
+Third-party components
+
+Third-party components keep their own licences. This includes the fonts in
+packages/design/fonts (SIL Open Font License 1.1; see the OFL-*.txt files
+there) and the dependencies named in the package.json files, each under the
+licence its own package states. snarkjs and circomlib are GPL-3.0.

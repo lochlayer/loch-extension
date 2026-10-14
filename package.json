@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Loch: a shielded balance inside the Solana wallet you already use. The browser extension and the packages it is built from.",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "GPL-3.0-only",
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=22"

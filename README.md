@@ -79,4 +79,4 @@ A token at any other address is not ours.
 
 ## Licence
 
-Copyright © 2026 Loch. All rights reserved. The source is published to be read, reviewed and checked against the released builds. It may not be copied, modified or redistributed without written permission. See [`LICENSE`](LICENSE). Third-party components keep their own licences.
+Copyright © 2026 Loch. The source code is free software under the GNU General Public License, version 3: you may use, study, change and share it under that licence's terms. See [`LICENSE`](LICENSE). The name "Loch", the mascot and the logo are not part of that grant: a changed version needs its own name and marks. See [`NOTICE`](NOTICE). Third-party components keep their own licences.
