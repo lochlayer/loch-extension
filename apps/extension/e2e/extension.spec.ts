@@ -410,7 +410,7 @@ test("a new browser session: locked, then unlocked with the one signature, the e
   const text = JSON.stringify(onDisk);
   expect(text).not.toContain(world.friend);
   expect(text).not.toContain('"kind"');
-  expect(Object.keys(onDisk).filter((key) => key.startsWith("vault:")).length).toBe(3);
+  expect(Object.keys(onDisk).filter((key) => key.startsWith("vault:")).map((key) => key.split(":")[2]).sort()).toEqual(["activity", "records", "scan", "state"]);
 
   await context.close();
   ({ context, extensionId } = await world.launch());
