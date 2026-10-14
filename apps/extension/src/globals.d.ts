@@ -9,6 +9,8 @@ declare const __LOCH_BUILD__: {
   circuit: string;
   /** The connect page fixed at build time, or null when it is a setting. */
   connectUrl: string | null;
+  /** The RPC endpoint a new installation starts with, or null for the cluster's public one. */
+  rpcUrl: string | null;
   /** The relayer and the screening service a new installation starts with, or null for this machine's. */
   relayerUrl: string | null;
   screenerUrl: string | null;

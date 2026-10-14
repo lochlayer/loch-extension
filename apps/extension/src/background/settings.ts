@@ -49,7 +49,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  rpcUrl: mainnetTestingEnabled() ? "https://api.mainnet-beta.solana.com" : DEFAULTS.rpcUrl,
+  rpcUrl: defaultServiceUrls().rpcUrl ?? (mainnetTestingEnabled() ? "https://api.mainnet-beta.solana.com" : DEFAULTS.rpcUrl),
   relayerUrl: defaultServiceUrls().relayerUrl ?? DEFAULTS.relayerUrl,
   screenerUrl: defaultServiceUrls().screenerUrl ?? DEFAULTS.screenerUrl,
   connectUrl: DEFAULTS.connectUrl,

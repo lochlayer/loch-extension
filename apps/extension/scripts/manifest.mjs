@@ -10,7 +10,7 @@ export const STATIC_HOSTS = [
 ];
 
 /**
- * `hosts`: the origins of the services this build names as its defaults (LOCH_RELAYER_URL, LOCH_SCREENER_URL).
+ * `hosts`: the origins of the endpoints this build names as its defaults (LOCH_RPC_URL, LOCH_RELAYER_URL, LOCH_SCREENER_URL).
  * `mainnetTesting`: the mainnet package. Its name and description are plain (the owner's decision, 2026-10-10); the status is stated inside the extension.
  */
 export function manifest({ version, hosts = [], mainnetTesting = false }) {

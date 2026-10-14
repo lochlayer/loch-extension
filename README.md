@@ -46,6 +46,7 @@ The build checks the two prover files against their recorded SHA-256 and stops i
 | --- | --- |
 | Program | `Lochn2sJLT2hkqMrx85siFPXa9VUTAAx9EXmkPiJL2j` |
 | Address lookup table | `EUauH5aJhqp3NfahYCQj4PBF5bQgq7TxtkqrsQ6uUt5S` |
+| RPC endpoint | `https://rpc.lochlayer.com` |
 | Relayer | `https://relayer-mainnet.lochlayer.com` |
 | Screening service | `https://screener-mainnet.lochlayer.com` |
 | Connect page | `https://connect.lochlayer.com/connect.html` |

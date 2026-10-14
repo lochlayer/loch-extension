@@ -13,7 +13,9 @@ describe("the explicit mainnet testing package", () => {
     const { DEFAULT_SETTINGS } = await import("../src/background/settings.js");
     const { assertAllowedCluster } = await import("../src/background/network.js");
     const { GENESIS } = await import("../src/shared/constants.js");
+    const { defaultServiceUrls } = await import("../src/shared/build.js");
     expect(DEFAULT_SETTINGS.rpcUrl).toBe("https://api.mainnet-beta.solana.com");
+    expect(defaultServiceUrls().rpcUrl).toBeNull();
     expect(() => assertAllowedCluster({ cluster: "mainnet-beta", genesisHash: GENESIS["mainnet-beta"] })).not.toThrow();
     expect(() => assertAllowedCluster({ cluster: "devnet", genesisHash: GENESIS.devnet })).toThrow(/requires a mainnet RPC/);
     expect(() => assertAllowedCluster({ cluster: "mainnet-beta", genesisHash: GENESIS.devnet })).toThrow(/requires a mainnet RPC/);

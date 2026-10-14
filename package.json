@@ -10,7 +10,7 @@
   },
   "scripts": {
     "build": "pnpm -r --workspace-concurrency=1 --if-present run build",
-    "build:mainnet": "pnpm --filter '@loch/extension^...' --workspace-concurrency=1 run build && LOCH_MAINNET_TESTING=1 LOCH_CONNECT_URL=https://connect.lochlayer.com/connect.html LOCH_RELAYER_URL=https://relayer-mainnet.lochlayer.com LOCH_SCREENER_URL=https://screener-mainnet.lochlayer.com pnpm --filter @loch/extension run build",
+    "build:mainnet": "pnpm --filter '@loch/extension^...' --workspace-concurrency=1 run build && LOCH_MAINNET_TESTING=1 LOCH_CONNECT_URL=https://connect.lochlayer.com/connect.html LOCH_RPC_URL=https://rpc.lochlayer.com LOCH_RELAYER_URL=https://relayer-mainnet.lochlayer.com LOCH_SCREENER_URL=https://screener-mainnet.lochlayer.com pnpm --filter @loch/extension run build",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "pnpm -r --workspace-concurrency=1 --no-bail --if-present run test"
   },

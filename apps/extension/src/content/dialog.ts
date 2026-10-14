@@ -7,6 +7,7 @@
 // (dist/dialog.css); the fonts arrive as bytes and are registered under names of their own, so
 // nothing is fetched from the page's context and the page's CSP is not involved.
 
+import { mainnetTestingEnabled } from "../shared/build.js";
 import type { ReviewReply } from "../shared/messages.js";
 
 export interface DialogAssets {
@@ -108,7 +109,8 @@ async function open(assets: DialogAssets, spec: OpenDialog): Promise<boolean> {
     const dialog = el(
       "section",
       { class: "dialog", role: "alertdialog", "aria-modal": "true", "aria-labelledby": spec.labelledBy, tabindex: "-1" },
-      el("p", { class: "caution-band" }, el("strong", {}, "Loch."), " Devnet alpha, unaudited."),
+      // The mainnet package carries no band here, as in its popup: its cautions are stated on the website.
+      ...(mainnetTestingEnabled() ? [] : [el("p", { class: "caution-band" }, el("strong", {}, "Loch."), " Devnet alpha, unaudited.")]),
       el("header", { class: "sheet__head" }, el("h2", { class: "sheet__title", id: spec.labelledBy }, spec.title)),
       el("div", { class: "sheet__body stack" }, ...spec.body),
       el("footer", { class: "sheet__foot" }, ...buttons),

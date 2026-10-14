@@ -87,9 +87,11 @@ function fixedConnectUrl() {
   return url.href;
 }
 
-// The relayer and the screening service a new installation starts with, when this build names them
-// (LOCH_RELAYER_URL, LOCH_SCREENER_URL). They stay settings: the user can point either elsewhere.
-// Without them the defaults are the ports of the development services on this machine.
+// The RPC endpoint, the relayer and the screening service a new installation starts with, when this
+// build names them (LOCH_RPC_URL, LOCH_RELAYER_URL, LOCH_SCREENER_URL). They stay settings: the user
+// can point any of them elsewhere. Without them the RPC endpoint is the cluster's public one and the
+// two services are the ports of the development services on this machine. An RPC address that carries
+// a provider's key has a path and is refused here: a key in a package is a key given to everyone.
 function defaultEndpoint(name) {
   const given = process.env[name];
   if (given === undefined || given === "") return null;
@@ -114,6 +116,7 @@ const buildInfo = {
   setup: artifactManifest.setup?.kind ?? "unknown",
   circuit: artifactManifest.circuit?.main ?? "unknown",
   connectUrl: fixedConnectUrl(),
+  rpcUrl: defaultEndpoint("LOCH_RPC_URL"),
   relayerUrl: defaultEndpoint("LOCH_RELAYER_URL"),
   screenerUrl: defaultEndpoint("LOCH_SCREENER_URL"),
 };
@@ -240,7 +243,7 @@ for (const name of bundled) {
 licences.push("", "Fonts: Old Standard TT and Libre Franklin (and Loch Tabular, derived from it), SIL Open Font License 1.1.", "See fonts/OFL-old-standard-tt.txt and fonts/OFL-libre-franklin.txt.", "", "snarkjs and its companions are GPL-3.0. The extension's own source is in the Loch repository.");
 writeFileSync(join(out, "licences.txt"), licences.join("\n") + "\n");
 
-writeFileSync(join(out, "manifest.json"), JSON.stringify(manifest({ version: pkg.version, mainnetTesting, hosts: [buildInfo.relayerUrl, buildInfo.screenerUrl].filter(Boolean) }), null, 2) + "\n");
+writeFileSync(join(out, "manifest.json"), JSON.stringify(manifest({ version: pkg.version, mainnetTesting, hosts: [buildInfo.rpcUrl, buildInfo.relayerUrl, buildInfo.screenerUrl].filter(Boolean) }), null, 2) + "\n");
 writeFileSync(join(out, "build-info.json"), JSON.stringify(buildInfo, null, 2) + "\n");
 
 // ------------------------------------------------------------------- 5. checks
@@ -279,5 +282,6 @@ console.log(`\nLoch extension ${pkg.version} -> ${relative(process.cwd(), out) |
 for (const [file, size] of sizes) console.log(`${kb(size)}  ${file}`);
 console.log(`${kb(sizes.reduce((sum, [, size]) => sum + size, 0))}  total`);
 console.log(`prover artifacts checked against the manifest: ${ARTIFACT_FILES.map((name) => `${name} ${artifacts[name].sha256.slice(0, 12)}`).join(", ")}`);
+if (buildInfo.rpcUrl) console.log(`default RPC endpoint in this build: ${buildInfo.rpcUrl}`);
 if (buildInfo.relayerUrl || buildInfo.screenerUrl) console.log(`default services in this build: relayer ${buildInfo.relayerUrl ?? "(this machine)"}, screener ${buildInfo.screenerUrl ?? "(this machine)"}`);
 console.log(buildInfo.connectUrl ? `connect page fixed in this build: ${buildInfo.connectUrl}` : "connect page: a setting (development build). A release build fixes it with --connect-url.");
