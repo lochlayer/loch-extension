@@ -6,11 +6,11 @@ Loch is a privacy layer for Solana. This is the source of its browser extension:
 - **Send privately:** pay another shielded address. Sender, recipient and amount stay off the public record.
 - **Surface:** withdraw to any Solana address.
 
-Website: [lochlayer.com](https://lochlayer.com) · Install: [lochlayer.com/install](https://lochlayer.com/install) · Docs: [lochlayer.com/docs](https://lochlayer.com/docs) · Cautions: [lochlayer.com/#cautions](https://lochlayer.com/#cautions) · X: [@lochlayer](https://x.com/lochlayer)
+Website: [lochlayer.com](https://lochlayer.com) · Chrome Web Store: [Loch](https://chromewebstore.google.com/detail/loch/cholegglblkeacfdjnnogaohmkogmckf) · Install: [lochlayer.com/install](https://lochlayer.com/install) · Docs: [lochlayer.com/docs](https://lochlayer.com/docs) · Cautions: [lochlayer.com/#cautions](https://lochlayer.com/#cautions) · X: [@lochlayer](https://x.com/lochlayer)
 
 ## Install
 
-For Chrome, Brave and Edge. The extension is in review for the Chrome Web Store. Until it is listed there, download the build and follow the steps at [lochlayer.com/install](https://lochlayer.com/install), or build it yourself as below.
+For Chrome, Brave and Edge. Add it from the [Chrome Web Store](https://chromewebstore.google.com/detail/loch/cholegglblkeacfdjnnogaohmkogmckf); it updates itself from there. You can also download the build and load it by hand (steps at [lochlayer.com/install](https://lochlayer.com/install)), or build it yourself as below.
 
 It works beside your Solana wallet. Phantom has been tried; Solflare and Backpack should work and have not been tried yet. Read the [cautions](https://lochlayer.com/#cautions) before you put funds in.
 
