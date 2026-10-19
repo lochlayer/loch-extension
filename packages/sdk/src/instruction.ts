@@ -65,7 +65,7 @@ type Web3Buffer = ReturnType<PublicKey["toBuffer"]>;
  * bundle), so the SDK never touches a `Buffer` global and callers still get a
  * real Buffer.
  */
-function toWeb3Buffer(bytes: Uint8Array): Web3Buffer {
+export function toWeb3Buffer(bytes: Uint8Array): Web3Buffer {
   const ctor = PublicKey.default.toBuffer().constructor as unknown as { from(source: Uint8Array): Web3Buffer };
   return ctor.from(bytes);
 }

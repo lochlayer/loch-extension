@@ -14,6 +14,7 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { base58 } from "@scure/base";
 import {
   FIELD_MODULUS,
+  LIGHTHOUSE_PROGRAM_ID,
   MerkleTree,
   NEW_COMMITMENT_DISCRIMINATOR,
   NEW_NULLIFIERS_DISCRIMINATOR,
@@ -61,8 +62,10 @@ export interface ChainTransaction {
   fee: number;
   preBalances: number[];
   postBalances: number[];
-  /** Accounts the transaction names, for getSignaturesForAddress. */
+  /** Accounts the transaction names, those loaded from lookup tables too, for getSignaturesForAddress. */
   accounts: string[];
+  /** The accounts loaded from lookup tables. */
+  loaded?: { writable: string[]; readonly: string[] };
   /** Set for history that was written directly (the scanner's fixtures). */
   parsed?: unknown;
 }
@@ -76,6 +79,15 @@ export class RpcFailure extends Error {
     super(message);
   }
 }
+
+/** What `simulateTransaction` answers. */
+export interface Simulation {
+  err: unknown;
+  logs: string[];
+}
+
+/** The pool's address lookup table on this chain: frozen, holding config, tree, vault and the system program. */
+export const POOL_LOOKUP_TABLE = new PublicKey("LochTab1e1111111111111111111111111111111111");
 
 export interface MockChainOptions {
   genesisHash?: string;
@@ -97,6 +109,8 @@ export class MockChain {
 
   readonly lamports = new Map<string, bigint>();
   readonly nullifiers = new Set<string>();
+  /** Frozen address lookup tables by address. */
+  readonly lookupTables = new Map<string, PublicKey[]>([[POOL_LOOKUP_TABLE.toBase58(), [configPda(), treePda(), vaultPda(), SystemProgram.programId]]]);
   readonly transactions: ChainTransaction[] = [];
   readonly blockhashes = new Map<string, number>();
   /** Every JSON-RPC method called, in order. */
@@ -143,8 +157,20 @@ export class MockChain {
 
   // --------------------------------------------------------------- execution
 
+  /** Runs a transaction as `simulateTransaction` with `sigVerify: false` would: nothing it does is kept. */
+  async simulate(raw: Uint8Array): Promise<Simulation> {
+    try {
+      return await this.process(raw, { simulate: true });
+    } catch (error) {
+      if (error instanceof RpcFailure && error.data && typeof error.data === "object" && "err" in error.data) return error.data as Simulation;
+      throw error;
+    }
+  }
+
   /** Runs a transaction as the cluster would. Returns its id, or throws RpcFailure as `sendTransaction` answers. */
-  async process(raw: Uint8Array): Promise<string> {
+  async process(raw: Uint8Array): Promise<string>;
+  async process(raw: Uint8Array, options: { simulate: true }): Promise<Simulation>;
+  async process(raw: Uint8Array, options: { simulate?: boolean } = {}): Promise<string | Simulation> {
     let transaction: VersionedTransaction;
     try {
       transaction = VersionedTransaction.deserialize(raw);
@@ -152,17 +178,30 @@ export class MockChain {
       throw new RpcFailure(-32602, "failed to deserialize transaction");
     }
     const message = transaction.message as MessageV0;
-    const keys = message.staticAccountKeys;
+    // The static keys, then the ones loaded from lookup tables: writable first, then read-only.
+    const loaded: { writable: PublicKey[]; readonly: PublicKey[] } = { writable: [], readonly: [] };
+    for (const lookup of message.addressTableLookups ?? []) {
+      const table = this.lookupTables.get(lookup.accountKey.toBase58());
+      const resolve = (index: number) => {
+        const key = table?.[index];
+        if (!key) throw new RpcFailure(-32602, "Transaction loads an address table account that doesn't exist");
+        return key;
+      };
+      loaded.writable.push(...lookup.writableIndexes.map(resolve));
+      loaded.readonly.push(...lookup.readonlyIndexes.map(resolve));
+    }
+    const keys = [...message.staticAccountKeys, ...loaded.writable, ...loaded.readonly];
     const serialised = message.serialize();
     const signers = keys.slice(0, message.header.numRequiredSignatures);
     for (const [index, signer] of signers.entries()) {
+      if (options.simulate) break;
       const signature = transaction.signatures[index];
       if (!signature || !ed25519.verify(signature, serialised, signer.toBytes())) {
         throw new RpcFailure(-32003, "Transaction signature verification failure");
       }
     }
     const signature = base58.encode(transaction.signatures[0]!);
-    if (this.transactions.some((tx) => tx.signature === signature)) {
+    if (!options.simulate && this.transactions.some((tx) => tx.signature === signature)) {
       throw new RpcFailure(-32002, "Transaction simulation failed: This transaction has already been processed", { err: "AlreadyProcessed", logs: [] });
     }
     const issuedAt = this.blockhashes.get(message.recentBlockhash);
@@ -199,7 +238,8 @@ export class MockChain {
     try {
       for (const instruction of message.compiledInstructions) {
         const program = keys[instruction.programIdIndex]!;
-        if (program.equals(ComputeBudgetProgram.programId)) {
+        if (program.equals(ComputeBudgetProgram.programId) || program.equals(LIGHTHOUSE_PROGRAM_ID)) {
+          // A wallet's assertions hold here: nothing they check is modelled.
           logs.push(`Program ${program.toBase58()} invoke [1]`, `Program ${program.toBase58()} success`);
           continue;
         }
@@ -267,6 +307,12 @@ export class MockChain {
           throw new ProgramFailure("InsufficientFundsForRent", { InsufficientFundsForRent: { account_index: keys.indexOf(key) } });
         }
       }
+      if (options.simulate) {
+        this.lamports.clear();
+        for (const [key, value] of before) this.lamports.set(key, value);
+        if (insertedPair) this.rollbackLastPair();
+        return { err: null, logs };
+      }
       for (const record of createdNullifiers) this.nullifiers.add(record);
     } catch (error) {
       if (!(error instanceof ProgramFailure)) throw error;
@@ -291,6 +337,7 @@ export class MockChain {
       preBalances,
       postBalances: keys.map((key) => Number(this.balance(key))),
       accounts: keys.map((key) => key.toBase58()),
+      loaded: { writable: loaded.writable.map((key) => key.toBase58()), readonly: loaded.readonly.map((key) => key.toBase58()) },
     };
     this.transactions.push(record);
     return signature;
@@ -412,6 +459,15 @@ export class MockChain {
     });
     if (this.initialized && address === treePda().toBase58()) return account(this.treeData(), PROGRAM_ID, 10_000_000n);
     if (this.initialized && address === configPda().toBase58()) return account(this.configData(), PROGRAM_ID, 2_000_000n);
+    const table = this.lookupTables.get(address);
+    if (table) {
+      // 56 bytes of metadata (type 1, never deactivated, no authority: frozen), then the addresses.
+      const data = Buffer.alloc(56 + 32 * table.length);
+      data.writeUInt32LE(1, 0);
+      data.writeBigUInt64LE((1n << 64n) - 1n, 4);
+      table.forEach((key, index) => key.toBuffer().copy(data, 56 + 32 * index));
+      return account(data, new PublicKey("AddressLookupTab1e1111111111111111111111111"), 1_000_000n);
+    }
     if (this.nullifiers.has(address)) return account(Buffer.concat([discriminator("account:NullifierRecord"), Buffer.from([255])]), PROGRAM_ID, NULLIFIER_RENT);
     const lamports = this.balance(address);
     return lamports > 0n ? account(Buffer.alloc(0), SystemProgram.programId, lamports) : null;
@@ -443,6 +499,12 @@ export class MockChain {
     if (tx.parsed) return tx.parsed;
     const message = tx.transaction.message as MessageV0;
     const keys = message.staticAccountKeys.map((key) => key.toBase58());
+    const all = [...keys, ...(tx.loaded?.writable ?? []), ...(tx.loaded?.readonly ?? [])];
+    const lookups = (message.addressTableLookups ?? []).map((lookup) => ({
+      accountKey: lookup.accountKey.toBase58(),
+      writableIndexes: lookup.writableIndexes,
+      readonlyIndexes: lookup.readonlyIndexes,
+    }));
     const meta = {
       err: tx.err,
       fee: tx.fee,
@@ -453,7 +515,7 @@ export class MockChain {
       preTokenBalances: [],
       postTokenBalances: [],
       rewards: [],
-      loadedAddresses: { writable: [], readonly: [] },
+      loadedAddresses: tx.loaded ?? { writable: [], readonly: [] },
       status: tx.err === null ? { Ok: null } : { Err: tx.err },
       computeUnitsConsumed: 175000,
     };
@@ -468,17 +530,21 @@ export class MockChain {
         transaction: {
           signatures,
           message: {
-            accountKeys: keys.map((pubkey, index) => ({
-              pubkey,
-              signer: index < numRequiredSignatures,
-              writable: index < numRequiredSignatures ? index < numRequiredSignatures - numReadonlySignedAccounts : index < keys.length - numReadonlyUnsignedAccounts,
-              source: "transaction",
-            })),
+            accountKeys: [
+              ...keys.map((pubkey, index) => ({
+                pubkey,
+                signer: index < numRequiredSignatures,
+                writable: index < numRequiredSignatures ? index < numRequiredSignatures - numReadonlySignedAccounts : index < keys.length - numReadonlyUnsignedAccounts,
+                source: "transaction",
+              })),
+              ...(tx.loaded?.writable ?? []).map((pubkey) => ({ pubkey, signer: false, writable: true, source: "lookupTable" })),
+              ...(tx.loaded?.readonly ?? []).map((pubkey) => ({ pubkey, signer: false, writable: false, source: "lookupTable" })),
+            ],
             recentBlockhash: message.recentBlockhash,
-            addressTableLookups: [],
+            addressTableLookups: lookups,
             instructions: message.compiledInstructions.map((instruction) => ({
-              programId: keys[instruction.programIdIndex],
-              accounts: instruction.accountKeyIndexes.map((index) => keys[index]),
+              programId: all[instruction.programIdIndex],
+              accounts: instruction.accountKeyIndexes.map((index) => all[index]),
               data: base58.encode(instruction.data),
               stackHeight: null,
             })),
@@ -497,7 +563,7 @@ export class MockChain {
           accountKeys: keys,
           header: message.header,
           recentBlockhash: message.recentBlockhash,
-          addressTableLookups: [],
+          addressTableLookups: lookups,
           instructions: message.compiledInstructions.map((instruction) => ({
             programIdIndex: instruction.programIdIndex,
             accounts: instruction.accountKeyIndexes,
@@ -560,6 +626,11 @@ export class MockChain {
             return tx ? { slot: tx.slot, confirmations: null, err: tx.err, status: tx.err === null ? { Ok: null } : { Err: tx.err }, confirmationStatus: "finalized" } : null;
           }),
         };
+      case "simulateTransaction": {
+        const raw = Buffer.from(params[0] as string, "base64");
+        const { err, logs } = await this.simulate(raw);
+        return { context: this.context(), value: { err, logs, accounts: null, unitsConsumed: 175000, returnData: null } };
+      }
       case "sendTransaction": {
         const encoding = (options(1).encoding as string | undefined) ?? "base58";
         const raw = encoding === "base64" ? Buffer.from(params[0] as string, "base64") : base58.decode(params[0] as string);

@@ -238,16 +238,22 @@ export interface ScreenerInfo {
   maxDepositLamports: string;
   /** What is screened, in a sentence or an https URL, to show to the user. */
   policy: string;
+  /**
+   * The pool's address lookup table (base58), if the service signs deposits
+   * that load accounts from it. A client compiles its deposit with it then, and
+   * not otherwise.
+   */
+  lookupTable?: string;
 }
-// A screening service may send more than these six fields (the one in this
+// A screening service may send more than these fields (the one in this
 // repository adds `policyVersion`, docs/protocol.md section 14.2). The
-// validator accepts such an answer and returns these six.
+// validator accepts such an answer and returns these.
 
 /** Body of `POST /v1/screen`. */
 export interface ScreenRequest {
   /**
    * base64 of a serialised v0 `VersionedTransaction` whose fee payer is the
-   * depositor. Signatures may be all zero. Exactly that transaction: nothing
+   * depositor. Signatures may be all zero, or hold the wallet's. Exactly that transaction: nothing
    * may follow it.
    */
   transaction: string;

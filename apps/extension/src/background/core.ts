@@ -118,8 +118,12 @@ export interface DiveRecord extends FlowBase {
   data?: string;
   /** Commitments of the two notes the deposit creates. */
   outputs?: string[];
+  /** The pool's lookup table the screening service named in its info (base58): the deposit is compiled with it. */
+  lookupTable?: string;
   /** The transaction with the screener's signature, waiting for the wallet's. base64. */
   unsigned?: string;
+  /** What the wallet signed when it added to the deposit (Lighthouse assertions), waiting for the screener's co-signature. base64. */
+  walletSigned?: string;
   lastValidBlockHeight?: number;
   /** Fully signed, base64. */
   signed?: string;
@@ -386,7 +390,7 @@ export class Core {
       view.walletName = flow.walletName;
       view.connectUrl = flow.connectUrl;
       view.proofKept = flow.data !== undefined;
-      view.cancellable = (flow.status === "running" || flow.status === "waiting") && ["checking", "proving", "screening", "signing"].includes(flow.step);
+      view.cancellable = (flow.status === "running" || flow.status === "waiting") && ["checking", "proving", "screening", "signing", "cosigning"].includes(flow.step);
     } else if (flow.kind === "claim") {
       // Never the code: it is the money.
       view.amount = flow.amount;

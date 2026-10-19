@@ -245,7 +245,7 @@ export function validateScreenResponse(body: unknown): WireResult<ScreenResponse
 export function validateScreenerInfo(body: unknown): WireResult<ScreenerInfo> {
   return run("bad_response", () => {
     const o = object(body, "body");
-    return {
+    const info: ScreenerInfo = {
       version: text(o.version, "version", 64),
       cluster: cluster(o.cluster, "cluster"),
       programId: publicKey(o.programId, "programId"),
@@ -253,6 +253,8 @@ export function validateScreenerInfo(body: unknown): WireResult<ScreenerInfo> {
       maxDepositLamports: lamports(o.maxDepositLamports, "maxDepositLamports"),
       policy: text(o.policy, "policy", 2048),
     };
+    if (o.lookupTable !== undefined) info.lookupTable = publicKey(o.lookupTable, "lookupTable");
+    return info;
   });
 }
 

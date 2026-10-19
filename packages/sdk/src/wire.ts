@@ -42,5 +42,5 @@ export type { WireClientOptions, WireFetch, WireRequestInit, WireResponse } from
 export { fromRelayRequest, toRelayRequest, toScreenRequest } from "./wire/convert.js";
 export { checkRelayRequest } from "./wire/relay.js";
 export type { RelayPolicy } from "./wire/relay.js";
-export { applyScreenerSignature, inspectDepositTransaction, parseScreenTransaction } from "./wire/screening.js";
+export { MAX_LIGHTHOUSE_INSTRUCTIONS, applyScreenerSignature, inspectDepositTransaction, parseScreenTransaction } from "./wire/screening.js";
 export type { DepositInspection, InspectDepositOptions } from "./wire/screening.js";

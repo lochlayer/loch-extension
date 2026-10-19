@@ -1,11 +1,12 @@
 // Wrapping a `transact` instruction into a v0 transaction.
 
 import { base58 } from "@scure/base";
-import { ComputeBudgetProgram, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
-import type { AddressLookupTableAccount, PublicKey, TransactionInstruction } from "@solana/web3.js";
+import { ComputeBudgetProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
+import type { AddressLookupTableAccount, PublicKey } from "@solana/web3.js";
 
 import { DEFAULT_COMPUTE_UNIT_LIMIT, MAX_TRANSACTION_SIZE } from "./constants.js";
 import { LochError } from "./errors.js";
+import { toWeb3Buffer } from "./instruction.js";
 
 /** Parameters of {@link buildTransactTransaction}. */
 export interface BuildTransactionParams {
@@ -19,13 +20,19 @@ export interface BuildTransactionParams {
   computeUnitLimit?: number;
   /** Priority fee in micro-lamports per compute unit. Omitted: no price instruction. */
   computeUnitPrice?: number | bigint;
+  /**
+   * Loaded-account-data limit in bytes (SetLoadedAccountsDataSizeLimit). Omitted: no such
+   * instruction. A deposit sets `DEPOSIT_LOADED_ACCOUNTS_DATA_SIZE_LIMIT`.
+   */
+  loadedAccountsDataSizeLimit?: number;
   /** An address lookup table to compress the account list with. */
   lookupTable?: AddressLookupTableAccount | null;
 }
 
 /**
  * Builds an unsigned v0 `VersionedTransaction`: SetComputeUnitLimit, an
- * optional SetComputeUnitPrice, then the `transact` instruction.
+ * optional SetComputeUnitPrice, an optional SetLoadedAccountsDataSizeLimit,
+ * then the `transact` instruction.
  *
  * @throws LochError `TRANSACTION_TOO_LARGE` if the result exceeds 1232 bytes,
  *   `INVALID_ARGUMENT` for a bad compute-unit setting or blockhash.
@@ -49,6 +56,13 @@ export function buildTransactTransaction(params: BuildTransactionParams): Versio
       throw new LochError("INVALID_ARGUMENT", "computeUnitPrice must fit in an unsigned 64-bit integer");
     }
     instructions.push(ComputeBudgetProgram.setComputeUnitPrice({ microLamports }));
+  }
+  if (params.loadedAccountsDataSizeLimit !== undefined) {
+    const bytes = params.loadedAccountsDataSizeLimit;
+    if (!Number.isInteger(bytes) || bytes <= 0 || bytes > 0xffff_ffff) {
+      throw new LochError("INVALID_ARGUMENT", "loadedAccountsDataSizeLimit must be a positive 32-bit integer");
+    }
+    instructions.push(setLoadedAccountsDataSizeLimit(bytes));
   }
   instructions.push(params.instruction);
 
@@ -74,4 +88,12 @@ export function buildTransactTransaction(params: BuildTransactionParams): Versio
     throw new LochError("TRANSACTION_TOO_LARGE", `the transaction is ${size} bytes; the limit is ${MAX_TRANSACTION_SIZE}`);
   }
   return transaction;
+}
+
+/** Compute budget instruction 4, SetLoadedAccountsDataSizeLimit(u32 bytes): web3.js 1.x has no helper for it. */
+export function setLoadedAccountsDataSizeLimit(bytes: number): TransactionInstruction {
+  const data = new Uint8Array(5);
+  data[0] = 4;
+  new DataView(data.buffer).setUint32(1, bytes, true);
+  return new TransactionInstruction({ programId: ComputeBudgetProgram.programId, keys: [], data: toWeb3Buffer(data) });
 }

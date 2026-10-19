@@ -1,4 +1,4 @@
-import { vaultPda } from "@loch/sdk";
+import { LIGHTHOUSE_PROGRAM_ID, vaultPda } from "@loch/sdk";
 import { Keypair, VersionedTransaction } from "@solana/web3.js";
 import { describe, expect, it } from "vitest";
 
@@ -10,6 +10,7 @@ import { syncWalletNow } from "../src/background/sync.js";
 import { DEPOSIT_OVERHEAD, SYSTEM_RENT_MINIMUM } from "../src/shared/constants.js";
 import { fromBase64 } from "../src/shared/bytes.js";
 import type { Snapshot } from "../src/shared/view.js";
+import { POOL_LOOKUP_TABLE } from "../e2e/mock/chain.js";
 import { CONNECT, type Harness, RELAYER, RPC, SCREENER, createHarness, settle } from "./harness.js";
 import { connect, dive, fund, otherPoolTransactions, shielded, strangerAddress } from "./steps.js";
 
@@ -304,6 +305,13 @@ describe("dive in", () => {
     const [prompt] = h.wallet.prompts;
     const shown = VersionedTransaction.deserialize(fromBase64(prompt?.kind === "signTransaction" ? prompt.transaction : ""));
     expect(shown.signatures.every((signature) => signature.every((byte) => byte === 0))).toBe(true);
+    // Compiled with the pool's lookup table the screening service named, with the loaded-data
+    // limit Phantom asks for, and simulated before the wallet was asked.
+    expect(shown.message.addressTableLookups.map((lookup) => lookup.accountKey.toBase58())).toEqual([POOL_LOOKUP_TABLE.toBase58()]);
+    expect(shown.message.compiledInstructions.some((instruction) => instruction.data[0] === 4 && instruction.data.length === 5)).toBe(true);
+    expect(shown.serialize().length).toBeLessThan(1_232 - 100);
+    expect(h.chain.calls.indexOf("simulateTransaction")).toBeGreaterThan(-1);
+    expect(h.chain.calls.indexOf("simulateTransaction")).toBeLessThan(h.chain.calls.indexOf("sendTransaction"));
     expect(h.chain.balance(h.wallet.address)).toBe(10n * SOL - 5n * SOL - DEPOSIT_OVERHEAD);
     expect(h.chain.balance(vaultPda())).toBe(SYSTEM_RENT_MINIMUM + 5n * SOL);
 
@@ -398,6 +406,59 @@ describe("dive in", () => {
     expect((await settle(h)).failure).toMatchObject({ code: "wallet-changed-transaction", moved: "no" });
     expect(h.chain.calls).not.toContain("sendTransaction");
     expect(h.chain.balance(h.wallet.address)).toBe(10n * SOL);
+  });
+
+  it("a wallet that adds Lighthouse assertions: the screener co-signs what the wallet signed, and it lands", async () => {
+    const h = createHarness();
+    await connect(h);
+    fund(h, 10n * SOL);
+    h.wallet.lighthouse = true;
+    await startDive(h.core, SOL);
+    const flow = (await settle(h)) as DiveRecord;
+    expect(flow.failure).toBeUndefined();
+    expect(flow.status).toBe("done");
+    // Screened twice: the deposit as built, then as the wallet returned it.
+    expect(h.screener.screened).toHaveLength(2);
+    const sent = h.chain.transactions.at(-1)!.transaction;
+    expect(sent.message.staticAccountKeys.some((key) => key.equals(LIGHTHOUSE_PROGRAM_ID))).toBe(true);
+    expect(sent.message.addressTableLookups).toHaveLength(1);
+    expect((await shielded(h)).balance).toBe(SOL);
+  });
+
+  it("a wallet that changes the deposit itself is caught before anything is sent", async () => {
+    const h = createHarness();
+    await connect(h);
+    fund(h, 10n * SOL);
+    h.wallet.rewrite = true;
+    await startDive(h.core, SOL);
+    expect((await settle(h)).failure).toMatchObject({ code: "wallet-changed-transaction", moved: "no" });
+    expect(h.screener.screened).toHaveLength(1);
+    expect(h.chain.calls).not.toContain("sendTransaction");
+    expect(h.chain.balance(h.wallet.address)).toBe(10n * SOL);
+  });
+
+  it("a screening service that names no lookup table gets the deposit as before", async () => {
+    const h = createHarness();
+    await connect(h);
+    fund(h, 10n * SOL);
+    h.screener.lookupTable = null;
+    await startDive(h.core, SOL);
+    expect((await settle(h)).status).toBe("done");
+    const sent = h.chain.transactions.at(-1)!.transaction;
+    expect(sent.message.addressTableLookups).toEqual([]);
+    expect(sent.message.compiledInstructions.some((instruction) => instruction.data[0] === 4 && instruction.data.length === 5)).toBe(false);
+  });
+
+  it("a deposit the simulation says would fail stops before the wallet is asked", async () => {
+    const h = createHarness();
+    await connect(h);
+    fund(h, 10n * SOL);
+    h.wallet.prompts.length = 0;
+    h.chain.simulate = async () => ({ err: { InstructionError: [2, { Custom: 6007 }] }, logs: ["Program log: AnchorError occurred. Error Code: DepositsPaused. Error Number: 6007. Error Message: DepositsPaused."] });
+    await startDive(h.core, SOL);
+    expect((await settle(h)).failure).toMatchObject({ code: "deposits-paused", moved: "no" });
+    expect(h.wallet.prompts.filter((prompt) => prompt.kind === "signTransaction")).toEqual([]);
+    expect(h.screener.requests).not.toContain("/v1/screen");
   });
 
   it("the service worker restarts while proving: the step is done again, nothing is lost", async () => {

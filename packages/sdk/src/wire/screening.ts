@@ -3,11 +3,11 @@
 
 import { ed25519 } from "@noble/curves/ed25519";
 import { base64 } from "@scure/base";
-import { ComputeBudgetProgram, PublicKey, VersionedTransaction } from "@solana/web3.js";
+import { type AddressLookupTableAccount, ComputeBudgetProgram, PublicKey, VersionedTransaction } from "@solana/web3.js";
 
 import { bytesToBigIntLE } from "../bytes.js";
 import type { TransactArgs } from "../codec.js";
-import { PROGRAM_ID } from "../constants.js";
+import { LIGHTHOUSE_PROGRAM_ID, PROGRAM_ID } from "../constants.js";
 import { type DecodedTransact, type TransactAccounts, decodeTransactInstruction, transactAccountsProblem } from "../instruction.js";
 import { type ScreenRequest, type ScreenResponse, WireError, type WireResult } from "./types.js";
 
@@ -29,6 +29,10 @@ export interface DepositInspection {
   computeUnitLimit: number | null;
   /** Value of the SetComputeUnitPrice instruction in micro-lamports, or null. */
   computeUnitPrice: bigint | null;
+  /** Value of the SetLoadedAccountsDataSizeLimit instruction in bytes, or null. */
+  loadedAccountsDataSizeLimit: number | null;
+  /** How many Lighthouse assertion instructions a wallet added. */
+  lighthouseInstructions: number;
   /** Position of the screener's signature in `transaction.signatures`. */
   screenerSignatureIndex: number;
   /** The exact bytes the screening authority signs: the serialised message. */
@@ -47,10 +51,18 @@ export interface InspectDepositOptions {
   screener: PublicKey;
   /** Defaults to the devnet program id. */
   programId?: PublicKey;
+  /**
+   * The pool's address lookup table, which a deposit may load accounts from.
+   * It must be frozen. Omitted: a deposit that uses a lookup table is refused.
+   */
+  lookupTable?: AddressLookupTableAccount | null;
 }
 
 const SET_COMPUTE_UNIT_LIMIT = 2;
 const SET_COMPUTE_UNIT_PRICE = 3;
+const SET_LOADED_ACCOUNTS_DATA_SIZE_LIMIT = 4;
+/** Most Lighthouse instructions a deposit may carry. Phantom adds one or two. */
+export const MAX_LIGHTHOUSE_INSTRUCTIONS = 8;
 
 /**
  * What each account of `transact` is in a deposit, in account order: config,
@@ -108,22 +120,31 @@ export function parseScreenTransaction(request: ScreenRequest): WireResult<Versi
  * signature authorises the whole message, so any other instruction, or the
  * screener's key in any other role, could spend the screener's own funds.
  *
- * Accepted: a v0 message without lookup tables whose instructions are at most
- * one SetComputeUnitLimit, at most one SetComputeUnitPrice and exactly one
- * `transact` with `ext_amount > 0`; exactly two required signers, the fee
- * payer (the depositor) and the screener, which must be `options.screener`;
- * the screener appears only in the screener slot, read-only; signer,
- * recipient and relayer are all the depositor; every account is the one the
- * program derives.
+ * Accepted: a v0 message whose instructions are exactly one `transact` with
+ * `ext_amount > 0`, at most one each of SetComputeUnitLimit,
+ * SetComputeUnitPrice and SetLoadedAccountsDataSizeLimit, and at most
+ * {@link MAX_LIGHTHOUSE_INSTRUCTIONS} instructions of the Lighthouse assertion
+ * program, which a wallet may add (Phantom does) and which can only make the
+ * transaction fail; exactly two required signers, the fee payer (the
+ * depositor) and the screener, which must be `options.screener`; the screener
+ * appears only in the screener slot of `transact`, read-only, and in no
+ * other instruction; signer, recipient and relayer are all the depositor;
+ * every account is the one the program derives. The message may load
+ * accounts from one address lookup table, `options.lookupTable` (the pool's),
+ * which must be frozen: its addresses never change, so the accounts inspected
+ * here are the accounts that run.
  *
  * The account list and the message header must be those of a deposit too:
- * no account is listed twice, every account is used by an instruction, and
- * the header gives each account exactly the signer and writable flags a
- * deposit has (docs/protocol.md section 11): the depositor a writable signer,
- * the screener a read-only signer, the tree, the vault and the two nullifier
- * records writable, the config, the system program and the program ids
- * read-only. A message that marks the tree read-only or the config writable
- * is not the deposit the protocol describes, whatever it would do on chain.
+ * no account is listed twice (counting the ones loaded from the table), every
+ * account is used by an instruction, and the header gives each account
+ * exactly the signer and writable flags a deposit has (docs/protocol.md
+ * section 11): the depositor a writable signer, the screener a read-only
+ * signer, the tree, the vault and the two nullifier records writable, the
+ * config, the system program and the program ids read-only. An account that
+ * only a Lighthouse instruction names may be writable (a Lighthouse memory
+ * account) but is never a signer. A message that marks the tree read-only or
+ * the config writable is not the deposit the protocol describes, whatever it
+ * would do on chain.
  *
  * Not checked here (the service's own job): the amount against its cap, the
  * pause flag, the blockhash, and the screening policy itself. That the bytes
@@ -145,23 +166,48 @@ export function inspectDepositTransaction(
   if (typeof expectedScreener?.equals !== "function") {
     throw new WireError("internal", "inspectDepositTransaction needs the screening authority's public key (options.screener)", 500);
   }
+  const table = options.lookupTable ?? null;
+  if (table && table.state.authority !== undefined) {
+    throw new WireError("internal", "options.lookupTable must be frozen: a table that can still change could load other accounts than the ones inspected", 500);
+  }
 
   const { message } = transaction;
   if (message.version !== 0) return fail("the transaction must be version 0");
-  if (message.addressTableLookups.length !== 0) return fail("address lookup tables are not allowed");
-  const keys = message.staticAccountKeys;
+  const lookups = message.addressTableLookups;
+  if (lookups.length > 1) return fail("at most one address lookup table is allowed");
+  if (lookups.length === 1 && !(table && lookups[0]!.accountKey.equals(table.key))) return fail("the only lookup table allowed is the pool's");
+  // Every account the transaction uses, by the index the instructions use: the static keys,
+  // then the writable and the read-only ones loaded from the table.
+  let keys: PublicKey[];
+  try {
+    keys = message.getAccountKeys({ addressLookupTableAccounts: table ? [table] : [] }).keySegments().flat();
+  } catch {
+    return fail("a lookup names an address the pool's table does not have");
+  }
   const { header } = message;
   if (header.numRequiredSignatures !== 2 || header.numReadonlySignedAccounts !== 1) {
     return fail("expected exactly two signers: the depositor and the read-only screener");
   }
   if (transaction.signatures.length !== 2) return fail("expected exactly two signature slots");
+  const staticKeys = message.staticAccountKeys.length;
+  if (!Number.isInteger(header.numReadonlyUnsignedAccounts) || header.numReadonlyUnsignedAccounts < 0 || header.numReadonlyUnsignedAccounts > staticKeys - 2) {
+    return fail("the message header does not fit its account list");
+  }
+  if (new Set(keys.map((key) => key.toBase58())).size !== keys.length) return fail("an account is listed twice");
 
   let decoded: DecodedTransact | null = null;
+  let transactIndexes: readonly number[] = [];
   let computeUnitLimit: number | null = null;
   let computeUnitPrice: bigint | null = null;
+  let loadedAccountsDataSizeLimit: number | null = null;
+  let lighthouse = 0;
+  const lighthouseAccounts = new Set<number>();
+  const programs = new Set<number>();
   for (const instruction of message.compiledInstructions) {
     const program = keys[instruction.programIdIndex];
     if (!program) return fail("an instruction refers to a missing program");
+    if (instruction.accountKeyIndexes.some((index) => index >= keys.length)) return fail("an instruction refers to a missing account");
+    programs.add(instruction.programIdIndex);
     if (program.equals(ComputeBudgetProgram.programId)) {
       const { data } = instruction;
       if (instruction.accountKeyIndexes.length !== 0) return fail("a compute budget instruction lists accounts");
@@ -169,8 +215,10 @@ export function inspectDepositTransaction(
         computeUnitLimit = Number(bytesToBigIntLE(data.subarray(1)));
       } else if (data[0] === SET_COMPUTE_UNIT_PRICE && data.length === 9 && computeUnitPrice === null) {
         computeUnitPrice = bytesToBigIntLE(data.subarray(1));
+      } else if (data[0] === SET_LOADED_ACCOUNTS_DATA_SIZE_LIMIT && data.length === 5 && loadedAccountsDataSizeLimit === null) {
+        loadedAccountsDataSizeLimit = Number(bytesToBigIntLE(data.subarray(1)));
       } else {
-        return fail("only one SetComputeUnitLimit and one SetComputeUnitPrice are allowed");
+        return fail("only one SetComputeUnitLimit, one SetComputeUnitPrice and one SetLoadedAccountsDataSizeLimit are allowed");
       }
     } else if (program.equals(programId)) {
       if (decoded) return fail("more than one loch_pool instruction");
@@ -179,6 +227,10 @@ export function inspectDepositTransaction(
       } catch {
         return fail("the loch_pool instruction is not a well-formed transact call");
       }
+      transactIndexes = instruction.accountKeyIndexes;
+    } else if (program.equals(LIGHTHOUSE_PROGRAM_ID)) {
+      if (++lighthouse > MAX_LIGHTHOUSE_INSTRUCTIONS) return fail(`more than ${MAX_LIGHTHOUSE_INSTRUCTIONS} Lighthouse instructions`);
+      for (const index of instruction.accountKeyIndexes) lighthouseAccounts.add(index);
     } else {
       return fail("it contains an instruction for another program");
     }
@@ -200,39 +252,38 @@ export function inspectDepositTransaction(
   if (!accounts.recipient.equals(depositor) || !accounts.relayer.equals(depositor)) {
     return fail("recipient and relayer must both be the depositor");
   }
-  // The screener's key may sit in the screener slot only.
+  // The screener's key may sit in the screener slot only: in no other slot of transact, and
+  // in no other instruction, as an account or as a program. (It is listed once, above.)
   const named: [string, PublicKey][] = Object.entries(accounts).filter((entry): entry is [string, PublicKey] => entry[1] !== null);
   if (named.some(([name, key]) => name !== "screener" && key.equals(screener))) {
     return fail("the screener's key is used as another account");
   }
+  if (lighthouseAccounts.has(1) || programs.has(1)) return fail("the screener's key is used by another instruction");
 
-  // The account list and the header, as the runtime reads them: by index.
-  const signers = header.numRequiredSignatures;
-  const readonlySigners = header.numReadonlySignedAccounts;
-  const readonlyUnsigned = header.numReadonlyUnsignedAccounts;
-  if (!Number.isInteger(readonlyUnsigned) || readonlyUnsigned < 0 || readonlyUnsigned > keys.length - signers) {
-    return fail("the message header does not fit its account list");
-  }
-  if (new Set(keys.map((key) => key.toBase58())).size !== keys.length) return fail("an account is listed twice");
-  // What a deposit makes of each account: the fee payer signs and pays, a
-  // program id is only executed, and the accounts of transact have the roles
-  // of section 11. (Compute budget instructions list no accounts.)
-  const expected = keys.map((_, index) => ({ used: index === 0, signer: index === 0, writable: index === 0 }));
-  for (const instruction of message.compiledInstructions) {
-    expected[instruction.programIdIndex]!.used = true;
-    instruction.accountKeyIndexes.forEach((index, slot) => {
-      const account = expected[index]!;
-      const role = DEPOSIT_ACCOUNT_ROLES[slot]!;
-      account.used = true;
-      account.signer ||= role.signer;
-      account.writable ||= role.writable;
-    });
+  // The flags each account has, as the runtime reads them: by index. What a deposit makes of
+  // each account: the fee payer signs and pays, a program id is only executed, the accounts
+  // of transact have the roles of section 11, and an account only Lighthouse names is not a
+  // signer. (Compute budget instructions list no accounts.)
+  const expected = keys.map((_, index) => ({ used: index === 0, signer: index === 0, writable: index === 0, free: false }));
+  for (const index of programs) expected[index]!.used = true;
+  transactIndexes.forEach((index, slot) => {
+    const account = expected[index]!;
+    const role = DEPOSIT_ACCOUNT_ROLES[slot]!;
+    account.used = true;
+    account.signer ||= role.signer;
+    account.writable ||= role.writable;
+  });
+  for (const index of lighthouseAccounts) {
+    const account = expected[index]!;
+    // Writable or not, as the wallet chose, when nothing else gives it a role.
+    account.free = !account.used;
+    account.used = true;
   }
   if (expected.some((account) => !account.used)) return fail("the account list holds an account that no instruction uses");
   for (const [index, account] of expected.entries()) {
-    const signer = index < signers;
-    const writable = signer ? index < signers - readonlySigners : index < keys.length - readonlyUnsigned;
-    if (signer !== account.signer || writable !== account.writable) {
+    const signer = message.isAccountSigner(index);
+    const writable = message.isAccountWritable(index);
+    if (signer !== account.signer || (!account.free && writable !== account.writable) || (programs.has(index) && writable)) {
       return fail("the message header gives an account other signer or writable flags than a deposit has");
     }
   }
@@ -248,6 +299,8 @@ export function inspectDepositTransaction(
       accounts,
       computeUnitLimit,
       computeUnitPrice,
+      loadedAccountsDataSizeLimit,
+      lighthouseInstructions: lighthouse,
       screenerSignatureIndex: 1,
       message: message.serialize(),
     },
@@ -256,9 +309,10 @@ export function inspectDepositTransaction(
 
 /**
  * Inserts the screening authority's signature into a deposit transaction, at
- * the screener's signer index. Call it before the wallet signs: wallets keep
- * signatures that are already there, and some rewrite transactions that have
- * none.
+ * the screener's signer index. Call it on the transaction the wallet signed,
+ * after it signed: a wallet warns about a transaction another key signed
+ * before it (Phantom does), and may add instructions of its own (Lighthouse
+ * assertions), which a signature made earlier would not cover.
  *
  * The signature is verified against the transaction message first, so a
  * screener that signed something else is caught here and not by the cluster.

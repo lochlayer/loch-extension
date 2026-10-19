@@ -6,10 +6,10 @@ import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import { ed25519 } from "@noble/curves/ed25519";
-import { type CircuitInput, type Groth16Proof, type Prover } from "@loch/sdk";
+import { type CircuitInput, type Groth16Proof, LIGHTHOUSE_PROGRAM_ID, type Prover } from "@loch/sdk";
 import { RelayerClient, ScreenerClient } from "@loch/sdk/wire";
 import { scanAddressDetailed } from "@loch/scanner-core";
-import { Keypair, VersionedTransaction } from "@solana/web3.js";
+import { Keypair, type MessageV0, VersionedTransaction } from "@solana/web3.js";
 
 import { MockChain } from "../e2e/mock/chain.js";
 import { type HttpReply, MockRelayer, MockScreener } from "../e2e/mock/services.js";
@@ -47,6 +47,22 @@ export function randomisedSignature(message: Uint8Array, secret: Uint8Array): Ui
   return Uint8Array.from(Buffer.concat([R, toLe((r + h * scalar) % order)]));
 }
 
+/**
+ * Appends a Lighthouse assertion on the fee payer to a compiled message, as a wallet does: the
+ * program becomes the last static key (read-only, unsigned), so the accounts loaded from lookup
+ * tables move up by one.
+ */
+function addAssertion(message: MessageV0): void {
+  const added = message.staticAccountKeys.length;
+  for (const instruction of message.compiledInstructions) {
+    if (instruction.programIdIndex >= added) instruction.programIdIndex++;
+    instruction.accountKeyIndexes = instruction.accountKeyIndexes.map((index) => (index >= added ? index + 1 : index));
+  }
+  message.staticAccountKeys.push(LIGHTHOUSE_PROGRAM_ID);
+  message.header.numReadonlyUnsignedAccounts++;
+  message.compiledInstructions.push({ programIdIndex: added, accountKeyIndexes: [0], data: Uint8Array.of(15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) });
+}
+
 /** A wallet as the page script sees it, signing with a real key. */
 export class TestWallet {
   readonly keypair = Keypair.generate();
@@ -58,6 +74,10 @@ export class TestWallet {
   randomised = false;
   /** Return a transaction other than the one asked for. */
   tamper = false;
+  /** Add a Lighthouse assertion on the fee payer before signing, as Phantom does. */
+  lighthouse = false;
+  /** Change the deposit's own instruction data before signing: a wallet that rewrites what it was given. */
+  rewrite = false;
   readonly prompts: BridgeRequest[] = [];
 
   get address(): string {
@@ -82,6 +102,12 @@ export class TestWallet {
       case "signTransaction": {
         const transaction = VersionedTransaction.deserialize(fromBase64(request.transaction));
         if (this.tamper) transaction.message.recentBlockhash = Keypair.generate().publicKey.toBase58();
+        if (this.lighthouse) addAssertion(transaction.message as MessageV0);
+        if (this.rewrite) {
+          const transact = transaction.message.compiledInstructions.find((instruction) => instruction.data.length > 100)!;
+          transact.data = Uint8Array.from(transact.data);
+          transact.data[transact.data.length - 1]! ^= 1;
+        }
         transaction.sign([this.keypair]);
         return { ok: true, value: { kind: "signTransaction", signedTransaction: toBase64(transaction.serialize()) } };
       }

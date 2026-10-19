@@ -73,6 +73,23 @@ export const MAX_AMOUNT = (1n << 64n) - 1n;
 export const DEFAULT_COMPUTE_UNIT_LIMIT = 300_000;
 
 /**
+ * Loaded-account-data limit a deposit sets (SetLoadedAccountsDataSizeLimit),
+ * in bytes. Phantom asks for it to be explicit. A deposit loads about 307 KB,
+ * nearly all of it the program; a wallet may add Lighthouse assertions, whose
+ * program is another 424 KB (both measured on mainnet, 2026-10-19). 2 MiB
+ * leaves room for both and for the program to grow.
+ */
+export const DEPOSIT_LOADED_ACCOUNTS_DATA_SIZE_LIMIT = 2 * 1024 * 1024;
+
+/**
+ * The Lighthouse assertion program. Wallets (Phantom) may add its instructions
+ * to a transaction they sign: each asserts something about an account and can
+ * only make the transaction fail. A deposit may carry them
+ * (`inspectDepositTransaction`).
+ */
+export const LIGHTHOUSE_PROGRAM_ID = new PublicKey("L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95");
+
+/**
  * Commitment level every RPC read of the SDK uses unless the caller passes
  * another one. `finalized` (what a `Connection` without a commitment uses) is
  * about 13 seconds behind and makes a transaction that just confirmed look as

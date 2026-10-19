@@ -16,7 +16,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { bytesToHex, concatBytes, hexToBytes, randomBytes } from "../src/bytes.js";
-import { BASE_FIELD_MODULUS } from "../src/constants.js";
+import { BASE_FIELD_MODULUS, DEPOSIT_LOADED_ACCOUNTS_DATA_SIZE_LIMIT, LIGHTHOUSE_PROGRAM_ID } from "../src/constants.js";
 import {
   FIELD_MODULUS,
   PROGRAM_ID,
@@ -27,10 +27,12 @@ import {
   encodeTransactArgs,
   fieldToBytes,
   nullifierPda,
+  setLoadedAccountsDataSizeLimit,
   treePda,
   vaultPda,
 } from "../src/index.js";
 import {
+  MAX_LIGHTHOUSE_INSTRUCTIONS,
   RelayerClient,
   type RelayRequest,
   ScreenerClient,
@@ -780,12 +782,85 @@ describe("ScreenerClient and the screening handshake", () => {
       screener: screener.publicKey,
     });
     const compressed = buildTransactTransaction({ instruction, payer: depositor.publicKey, recentBlockhash: BLOCKHASH, lookupTable });
-    expect(reasonOf(compressed)).toMatch(/lookup tables/);
+    expect(reasonOf(compressed)).toMatch(/lookup table/);
 
     const legacy = new Transaction({ feePayer: depositor.publicKey, recentBlockhash: BLOCKHASH }).add(instruction);
     expect(reasonOf(new VersionedTransaction(legacy.compileMessage()))).toMatch(/version 0/);
 
     expect(parseScreenTransaction({ transaction: "AQID" })).toMatchObject({ ok: false, error: { code: "invalid_transaction" } });
+  });
+
+  /** The pool's table, as on both clusters: frozen, holding config, tree, vault and the system program. */
+  const poolTable = new AddressLookupTableAccount({
+    key: address("pool lookup table"),
+    state: {
+      deactivationSlot: BigInt("18446744073709551615"),
+      lastExtendedSlot: 0,
+      lastExtendedSlotStartIndex: 0,
+      authority: undefined,
+      addresses: [configPda(), treePda(), vaultPda(), SystemProgram.programId],
+    },
+  });
+  const depositInstruction = () =>
+    buildTransactInstruction(sampleArgs({ recipient: depositor.publicKey, relayer: depositor.publicKey, extAmount: 1_000_000_000n, fee: 0n }), {
+      signer: depositor.publicKey,
+      screener: screener.publicKey,
+    });
+  /** A deposit as a wallet that adds Lighthouse assertions would hand it back. */
+  const withLighthouse = (extra: TransactionInstruction[]) =>
+    new VersionedTransaction(
+      new TransactionMessage({
+        payerKey: depositor.publicKey,
+        recentBlockhash: BLOCKHASH,
+        instructions: [ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 }), depositInstruction(), ...extra],
+      }).compileToV0Message([poolTable]),
+    );
+  const assertion = (keys: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = []) =>
+    new TransactionInstruction({ programId: LIGHTHOUSE_PROGRAM_ID, keys, data: Buffer.from([15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) });
+
+  it("accepts the pool's frozen lookup table and a loaded-data limit, and only that table", () => {
+    const compressed = buildTransactTransaction({
+      instruction: depositInstruction(),
+      payer: depositor.publicKey,
+      recentBlockhash: BLOCKHASH,
+      lookupTable: poolTable,
+      loadedAccountsDataSizeLimit: DEPOSIT_LOADED_ACCOUNTS_DATA_SIZE_LIMIT,
+    });
+    // The table takes four keys out of the message: room for what a wallet adds.
+    expect(compressed.serialize().length).toBeLessThan(depositTransaction().serialize().length - 80);
+    const result = inspectDepositTransaction(compressed, { screener: screener.publicKey, lookupTable: poolTable });
+    expect(result).toMatchObject({ ok: true, value: { loadedAccountsDataSizeLimit: DEPOSIT_LOADED_ACCOUNTS_DATA_SIZE_LIMIT, computeUnitLimit: 300_000, lighthouseInstructions: 0 } });
+    // Without the table, or with another one, it is refused.
+    expect(reasonOf(compressed)).toMatch(/lookup table/);
+    const other = new AddressLookupTableAccount({ key: address("someone else's table"), state: poolTable.state });
+    expect(inspectDepositTransaction(compressed, { screener: screener.publicKey, lookupTable: other })).toMatchObject({ ok: false });
+    // A table that can still change is not one to sign against.
+    const open = new AddressLookupTableAccount({ key: poolTable.key, state: { ...poolTable.state, authority: address("table authority") } });
+    expect(() => inspectDepositTransaction(compressed, { screener: screener.publicKey, lookupTable: open })).toThrow(expect.objectContaining({ code: "internal" }));
+    // One loaded-data limit, not two.
+    const twice = [setLoadedAccountsDataSizeLimit(1_000), setLoadedAccountsDataSizeLimit(2_000)];
+    expect(reasonOf(depositTransaction({ extra: twice }))).toMatch(/only one/);
+    expect(reasonOf(depositTransaction({ extra: [setLoadedAccountsDataSizeLimit(1_000)] }))).toBe("accepted");
+  });
+
+  it("accepts Lighthouse assertions a wallet adds, but never on the screener's key", () => {
+    const memory = address("lighthouse memory");
+    const added = withLighthouse([
+      assertion(),
+      assertion([{ pubkey: depositor.publicKey, isSigner: false, isWritable: false }]),
+      assertion([{ pubkey: memory, isSigner: false, isWritable: true }, { pubkey: depositor.publicKey, isSigner: true, isWritable: true }]),
+    ]);
+    const result = inspectDepositTransaction(added, { screener: screener.publicKey, lookupTable: poolTable });
+    expect(result).toMatchObject({ ok: true, value: { lighthouseInstructions: 3 } });
+    const onScreener = withLighthouse([assertion([{ pubkey: screener.publicKey, isSigner: false, isWritable: false }])]);
+    expect(inspectDepositTransaction(onScreener, { screener: screener.publicKey, lookupTable: poolTable })).toMatchObject({ ok: false, error: { message: expect.stringMatching(/screener/) } });
+    const writableTree = withLighthouse([assertion([{ pubkey: configPda(), isSigner: false, isWritable: true }])]);
+    expect(inspectDepositTransaction(writableTree, { screener: screener.publicKey, lookupTable: poolTable })).toMatchObject({ ok: false, error: { message: expect.stringMatching(/flags/) } });
+    const third = Keypair.generate().publicKey;
+    const signing = withLighthouse([assertion([{ pubkey: third, isSigner: true, isWritable: false }])]);
+    expect(inspectDepositTransaction(signing, { screener: screener.publicKey, lookupTable: poolTable })).toMatchObject({ ok: false, error: { message: expect.stringMatching(/two signers/) } });
+    const many = withLighthouse(Array.from({ length: MAX_LIGHTHOUSE_INSTRUCTIONS + 1 }, () => assertion()));
+    expect(inspectDepositTransaction(many, { screener: screener.publicKey, lookupTable: poolTable })).toMatchObject({ ok: false, error: { message: expect.stringMatching(/Lighthouse/) } });
   });
 
   // Offset of the three header bytes in a serialised two-signer v0 transaction: signature count, two signatures, version prefix.

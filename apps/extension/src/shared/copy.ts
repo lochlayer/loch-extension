@@ -98,7 +98,7 @@ const STAGES: Record<FlowKind, { steps: string[]; now: string; done: string }[]>
     { steps: ["checking"], now: "Checking", done: "Checked" },
     { steps: ["proving"], now: "Proving", done: "Proved" },
     { steps: ["screening"], now: "Screening", done: "Screened" },
-    { steps: ["signing"], now: "Signing", done: "Signed" },
+    { steps: ["signing", "cosigning"], now: "Signing", done: "Signed" },
     { steps: ["sending", "confirming"], now: "Confirming", done: "Confirmed" },
   ],
   send: [
@@ -172,6 +172,8 @@ export function statusSentence(flow: Pick<FlowView, "kind" | "step" | "walletNam
         return "The screening service is checking the deposit.";
       case "signing":
         return `${wallet} is asking you to approve the deposit. Answer it in the wallet’s window.`;
+      case "cosigning":
+        return "The screening service is co-signing the deposit you approved.";
       case "sending":
         return "Sending the deposit to the network.";
       case "confirming":

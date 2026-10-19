@@ -30,6 +30,7 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { base58 } from "@scure/base";
 import {
   ConsolidationRequiredError,
+  DEPOSIT_LOADED_ACCOUNTS_DATA_SIZE_LIMIT,
   FeeTooHighError,
   InsufficientBalanceError,
   KEY_DERIVATION_MESSAGE,
@@ -44,8 +45,10 @@ import {
   decodeRecipient,
   decodeTransactArgs,
   encodeShieldedAddress,
+  encodeTransactArgs,
   fetchPoolConfig,
   fetchTreeAccount,
+  inspectDepositTransaction,
   parseProgramError,
   prepareConsolidation,
   prepareDeposit,
@@ -57,7 +60,7 @@ import {
   unspentNotes,
 } from "@loch/sdk";
 import type { OwnedNote } from "@loch/sdk";
-import { PublicKey, VersionedTransaction } from "@solana/web3.js";
+import { type AddressLookupTableAccount, type Connection, PublicKey, VersionedTransaction } from "@solana/web3.js";
 
 import { bytesEqual, fromBase64, randomToken, toBase64, utf8 } from "../shared/bytes.js";
 import { DEPOSIT_OVERHEAD, SYSTEM_RENT_MINIMUM, chainOf } from "../shared/constants.js";
@@ -456,6 +459,10 @@ async function stepDive(core: Core, flow: DiveRecord): Promise<void> {
         throw fail("screener-mismatch");
       }
       if (amount > BigInt(info.maxDepositLamports)) throw fail("above-max", { limit: info.maxDepositLamports });
+      // A service that names the pool's lookup table signs deposits compiled with it: they are
+      // 90 bytes shorter, which leaves the wallet room for its own assertions.
+      if (info.lookupTable) flow.lookupTable = info.lookupTable;
+      else delete flow.lookupTable;
       await core.enter(flow, flow.data ? "screening" : "proving");
       return;
     }
@@ -478,8 +485,18 @@ async function stepDive(core: Core, flow: DiveRecord): Promise<void> {
       if (!flow.data) throw fail("internal");
       const config = await fetchPoolConfig(chain.connection);
       const instruction = buildTransactInstruction(decodeTransactArgs(fromBase64(flow.data)), { signer: depositor, screener: config.screener });
+      const table = await poolTable(chain, flow.lookupTable);
       const { blockhash, lastValidBlockHeight } = await chain.connection.getLatestBlockhash("confirmed");
-      const transaction = buildTransactTransaction({ instruction, payer: depositor, recentBlockhash: blockhash });
+      const transaction = buildTransactTransaction({
+        instruction,
+        payer: depositor,
+        recentBlockhash: blockhash,
+        // With the table, the limits Phantom asks for: the screening service that names it accepts them.
+        ...(table ? { lookupTable: table, loadedAccountsDataSizeLimit: DEPOSIT_LOADED_ACCOUNTS_DATA_SIZE_LIMIT } : {}),
+      });
+      delete flow.walletSigned;
+      // A deposit that would fail is stopped here, before the wallet is asked (Phantom warns about one).
+      await simulateDeposit(chain, transaction, flow);
       // The screener is asked first, so a refused deposit never reaches the wallet, but the wallet
       // is shown the transaction with no signature in it: Phantom warns about a transaction that
       // someone else signed before it ("have Phantom sign first"). A signature covers the message
@@ -502,6 +519,29 @@ async function stepDive(core: Core, flow: DiveRecord): Promise<void> {
       // Reached only after a restart between writing the step and asking the wallet: ask again, with a fresh blockhash.
       await core.enter(flow, "screening");
       return;
+    case "cosigning": {
+      // The wallet added to the deposit before it signed (Phantom adds Lighthouse assertions).
+      // The screening service signed the deposit as it was; it is asked again for what the
+      // wallet returned, once that is known to be the same deposit with additions only.
+      if (!flow.unsigned || !flow.walletSigned) throw fail("internal");
+      const config = await fetchPoolConfig(chain.connection);
+      const table = await poolTable(chain, flow.lookupTable);
+      const ours = VersionedTransaction.deserialize(fromBase64(flow.unsigned));
+      const theirs = VersionedTransaction.deserialize(fromBase64(flow.walletSigned));
+      const problem = walletAdditionsProblem(ours, theirs, config.screener, table);
+      if (problem) throw fail("wallet-changed-transaction", { retry: true, detail: problem });
+      try {
+        applyScreenerSignature(theirs, await core.env.screener(settings, chain).screen(toScreenRequest(theirs)));
+      } catch (error) {
+        throw screeningFailure(settings.screenerUrl, error);
+      }
+      if (!allSigned(theirs)) throw fail("wallet-changed-transaction", { retry: true });
+      flow.signed = toBase64(theirs.serialize());
+      flow.signature = base58.encode(theirs.signatures[0]!);
+      delete flow.walletSigned;
+      await core.enter(flow, "sending");
+      return;
+    }
     case "sending": {
       if (!flow.signed || !flow.outputs) throw fail("internal");
       const now = core.env.now();
@@ -602,20 +642,22 @@ function screeningFailure(url: string, error: unknown): FlowFailure {
   }
 }
 
+function programFailure(kind: string): FlowFailure {
+  switch (kind) {
+    case "DepositsPaused":
+      return fail("deposits-paused");
+    case "DepositTooLarge":
+      return fail("above-max");
+    case "UnknownRoot":
+      return fail("stale-root", { retry: true });
+    default:
+      return fail("transaction-failed", { detail: kind });
+  }
+}
+
 function sendFailure(rpcUrl: string, error: unknown): FlowFailure {
   const program = parseProgramError(error);
-  if (program) {
-    switch (program.kind) {
-      case "DepositsPaused":
-        return fail("deposits-paused");
-      case "DepositTooLarge":
-        return fail("above-max");
-      case "UnknownRoot":
-        return fail("stale-root", { retry: true });
-      default:
-        return fail("transaction-failed", { detail: program.kind });
-    }
-  }
+  if (program) return programFailure(program.kind);
   const text = error instanceof Error ? error.message : String(error);
   if (/blockhash not found|block height exceeded|expired/i.test(text)) return fail("expired", { retry: true });
   if (/insufficient (funds|lamports)|debit an account/i.test(text)) return fail("insufficient-public");
@@ -635,13 +677,28 @@ async function diveAnswer(core: Core, flow: DiveRecord, answer: BridgeAnswer): P
   } catch {
     throw fail("wallet-changed-transaction", { retry: true });
   }
-  // What comes back must be the transaction that went out, signed and otherwise untouched. A
-  // wallet that adds or reorders instructions breaks the screener's signature.
   const message = ours.message.serialize();
-  if (!bytesEqual(message, theirs.message.serialize())) throw fail("wallet-changed-transaction", { retry: true });
+  const depositor = new PublicKey(flow.address);
+  if (!bytesEqual(message, theirs.message.serialize())) {
+    // The wallet changed the transaction before signing it, as Phantom does when it adds its
+    // Lighthouse assertions. The screener's signature does not cover that: keep what the wallet
+    // signed, provided its signature is good, and ask the screener again (step "cosigning"),
+    // where the change is checked to be additions only.
+    const signature = theirs.signatures[0];
+    let valid = false;
+    try {
+      valid = theirs.message.staticAccountKeys[0]?.equals(depositor) === true && signature !== undefined && ed25519.verify(signature, theirs.message.serialize(), depositor.toBytes());
+    } catch {
+      valid = false;
+    }
+    if (!valid) throw fail("wallet-changed-transaction", { retry: true });
+    flow.walletSigned = toBase64(theirs.serialize());
+    await closeBridgeTab(core);
+    await core.enter(flow, "cosigning");
+    return;
+  }
   const signers = ours.message.staticAccountKeys.slice(0, ours.message.header.numRequiredSignatures);
   // The wallet signed a copy without the screener's signature: only its own is taken from it.
-  const depositor = new PublicKey(flow.address);
   const own = signers.findIndex((signer) => signer.equals(depositor));
   const wallets = theirs.signatures[own];
   if (own < 0 || !wallets) throw fail("wallet-changed-transaction", { retry: true });
@@ -661,6 +718,79 @@ async function diveAnswer(core: Core, flow: DiveRecord, answer: BridgeAnswer): P
   flow.signature = base58.encode(ours.signatures[0]!);
   await closeBridgeTab(core);
   await core.enter(flow, "sending");
+}
+
+/**
+ * The pool's lookup table, as the screening service named it. Only a frozen table is used: its
+ * addresses cannot change between the screening and the moment the deposit runs.
+ */
+async function poolTable(chain: Chain, address: string | undefined): Promise<AddressLookupTableAccount | null> {
+  if (!address) return null;
+  const { value } = await chain.connection.getAddressLookupTable(new PublicKey(address), { commitment: "confirmed" });
+  if (!value || !value.isActive() || value.state.authority !== undefined) throw fail("screener-mismatch");
+  return value;
+}
+
+/**
+ * Simulates the deposit with no signature checks, as Phantom asks of an application before it
+ * requests a signature. A program error stops the flow before the wallet is asked; an endpoint
+ * that does not simulate (or does not answer) does not: sending will tell.
+ */
+async function simulateDeposit(chain: Chain, transaction: VersionedTransaction, flow: DiveRecord): Promise<void> {
+  let result: Awaited<ReturnType<Connection["simulateTransaction"]>>;
+  try {
+    result = await chain.connection.simulateTransaction(transaction, { sigVerify: false, replaceRecentBlockhash: false, commitment: "confirmed" });
+  } catch {
+    return;
+  }
+  const { err, logs } = result.value;
+  if (!err) return;
+  const program = parseProgramError({ err, logs: logs ?? [] });
+  if (program?.kind === "UnknownRoot") {
+    // The proof names a root the pool has forgotten: prove again on the next try.
+    delete flow.data;
+    delete flow.outputs;
+  }
+  if (program) throw programFailure(program.kind);
+  if (err === "BlockhashNotFound") throw fail("expired", { retry: true });
+  if (err === "AccountNotFound" || err === "InsufficientFundsForFee") throw fail("insufficient-public");
+  throw fail("transaction-failed", { detail: JSON.stringify(err).slice(0, 140) });
+}
+
+/**
+ * What is wrong with the transaction the wallet returned, as additions to the deposit that went
+ * out, or null. It must be a deposit the screening service would sign (its own rules), with the
+ * same blockhash, fee payer and `transact` call, accounts and arguments byte for byte: the
+ * wallet may add assertions and change the compute budget, and nothing else.
+ */
+function walletAdditionsProblem(ours: VersionedTransaction, theirs: VersionedTransaction, screener: PublicKey, table: AddressLookupTableAccount | null): string | null {
+  if (theirs.message.recentBlockhash !== ours.message.recentBlockhash) return "the wallet changed the blockhash";
+  const options = { screener, lookupTable: table };
+  const before = inspectDepositTransaction(ours, options);
+  const after = inspectDepositTransaction(theirs, options);
+  if (!before.ok) return before.error.message;
+  if (!after.ok) return after.error.message;
+  if (!after.value.depositor.equals(before.value.depositor)) return "the wallet changed the fee payer";
+  if (!bytesEqual(encodeTransactArgs(after.value.args), encodeTransactArgs(before.value.args))) return "the wallet changed the deposit";
+  for (const [name, key] of Object.entries(before.value.accounts)) {
+    const other = after.value.accounts[name as keyof typeof after.value.accounts];
+    if ((key === null) !== (other === null) || (key && other && !key.equals(other))) return "the wallet changed an account of the deposit";
+  }
+  return null;
+}
+
+/** Every required signature is there and verifies over the message. */
+function allSigned(transaction: VersionedTransaction): boolean {
+  const message = transaction.message.serialize();
+  const signers = transaction.message.staticAccountKeys.slice(0, transaction.message.header.numRequiredSignatures);
+  return signers.every((signer, index) => {
+    const signature = transaction.signatures[index];
+    try {
+      return signature !== undefined && ed25519.verify(signature, message, signer.toBytes());
+    } catch {
+      return false;
+    }
+  });
 }
 
 // ------------------------------------------------- send privately and surface
@@ -1165,7 +1295,7 @@ export async function resumeFlow(core: Core): Promise<void> {
       flow.discoveries = 0;
     }
   } else if (flow.kind === "dive") {
-    if (flow.step === "checking" || flow.step === "proving" || flow.step === "screening" || flow.step === "signing") flow.step = "checking";
+    if (flow.step === "checking" || flow.step === "proving" || flow.step === "screening" || flow.step === "signing" || flow.step === "cosigning") flow.step = "checking";
     // sending: the same signed bytes are sent again. confirming: polling goes on.
   } else if (flow.kind === "claim") {
     if (!(await resumeClaim(core, flow))) return;

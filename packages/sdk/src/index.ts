@@ -21,9 +21,11 @@
 export {
   DEFAULT_COMMITMENT,
   DEFAULT_COMPUTE_UNIT_LIMIT,
+  DEPOSIT_LOADED_ACCOUNTS_DATA_SIZE_LIMIT,
   ENCRYPTED_NOTE_LENGTH,
   FIELD_MODULUS,
   KEY_DERIVATION_MESSAGE,
+  LIGHTHOUSE_PROGRAM_ID,
   MAX_ENCRYPTED_OUTPUT_LENGTH,
   MAX_TRANSACTION_SIZE,
   PAYMENT_CODE_GAP,
@@ -89,7 +91,7 @@ export {
 export type { ExtData, Groth16Proof, ProofBytes, TransactArgs } from "./codec.js";
 export { buildTransactInstruction, decodeTransactInstruction, transactAccountsProblem } from "./instruction.js";
 export type { CompiledInstructionLike, DecodedTransact, TransactAccounts, TransactSigners } from "./instruction.js";
-export { buildTransactTransaction } from "./transaction.js";
+export { buildTransactTransaction, setLoadedAccountsDataSizeLimit } from "./transaction.js";
 export type { BuildTransactionParams } from "./transaction.js";
 
 export {

@@ -14,7 +14,7 @@ export type FlowKind = "unlock" | "dive" | "send" | "surface" | "consolidate" | 
 export type FlowStatus = "running" | "waiting" | "failed" | "done";
 
 export type UnlockStep = "opening" | "discovering" | "choosing" | "connecting" | "signing" | "signing-again" | "syncing" | "done";
-export type DiveStep = "checking" | "proving" | "screening" | "signing" | "sending" | "confirming" | "done";
+export type DiveStep = "checking" | "proving" | "screening" | "signing" | "cosigning" | "sending" | "confirming" | "done";
 export type SpendStep = "checking" | "proving" | "sending" | "confirming" | "done";
 export type ClaimStep = SpendStep;
 
