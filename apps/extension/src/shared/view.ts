@@ -383,8 +383,6 @@ export interface ViewingKeyReply {
 /** The answer to "public-balance". */
 export type PublicBalanceReply =
   | { status: "read"; lamports: string; at: number }
-  /** Not read: a private spend is in progress or ended a moment ago. `until`: when it may be read, milliseconds. */
-  | { status: "held"; until: number }
   | { status: "unreachable"; detail: string };
 
 export interface SurfaceWarningView {

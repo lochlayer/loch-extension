@@ -176,7 +176,7 @@ export function ActivityView({ snapshot, api, onClose, toast }: ViewProps & { to
       {snapshot.activity.length === 0 ? (
         <div class="empty">
           <p class="empty__title">No activity yet</p>
-          <p>Dive in to move test SOL from your public wallet into your shielded balance. The deposit is public. What you do after it is not.</p>
+          <p>Dive in to move {mainnetTestingEnabled() ? "SOL" : "test SOL"} from your public wallet into your shielded balance. The deposit is public. What you do after it is not.</p>
         </div>
       ) : (
         <ul class="activity activity--full">

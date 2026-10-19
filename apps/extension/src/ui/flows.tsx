@@ -6,8 +6,9 @@ import type { ComponentChildren } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 
 import { amountProblemText, displaySol, exactSol, inputSol, parseAmountInput } from "../shared/amounts.js";
+import { mainnetTestingEnabled } from "../shared/build.js";
 import { DEPOSIT_OVERHEAD, SYSTEM_RENT_MINIMUM } from "../shared/constants.js";
-import { ACTION_NAME, ACTION_RUNNING, OBSERVER, busyLabel, clockText, failureCopy, shortAddress, whenText } from "../shared/copy.js";
+import { ACTION_NAME, ACTION_RUNNING, OBSERVER, busyLabel, failureCopy, shortAddress, whenText } from "../shared/copy.js";
 import type { AddressCheck, FlowView, PublicBalanceReply, Quote, Snapshot, SurfaceWarningView } from "../shared/view.js";
 import type { Api, Draft } from "./api.js";
 import type { View } from "./App.js";
@@ -414,25 +415,15 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<SurfaceWarningView[]>([]);
-  /** Dive in: when the public balance may be read, if the worker is holding it back. */
-  const [heldUntil, setHeldUntil] = useState<number | null>(null);
   const restored = useRef(false);
   const { quote, error: quoteError, reload } = useQuote(api, kind === "dive" ? "dive" : "spend");
   const address = useAddressCheck(api, kind === "send" ? "shielded" : "public", kind === "dive" || linked ? "" : to);
   const shielded = snapshot.shielded;
   const now = api.now();
 
-  // Opening the dive-in form is asking for the public balance: a deposit is made from it.
-  // Sending privately and surfacing never read it.
+  // Opening the dive-in form reads the public balance at once: a deposit is made from it.
   useEffect(() => {
-    if (kind !== "dive") return;
-    let live = true;
-    void api.call<PublicBalanceReply>({ loch: "ui", type: "public-balance" }).then((reply) => {
-      if (live && reply.ok && reply.value.status === "held") setHeldUntil(reply.value.until);
-    });
-    return () => {
-      live = false;
-    };
+    if (kind === "dive") void api.call<PublicBalanceReply>({ loch: "ui", type: "public-balance" });
   }, [api, kind]);
 
   // What was typed survives the popup closing.
@@ -477,7 +468,7 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
       else if (budget !== null && amount > budget) {
         amountError =
           budget === 0n
-            ? "Your public balance does not cover the network fee and rent of a deposit. Add test SOL to the wallet."
+            ? `Your public balance does not cover the network fee and rent of a deposit. Add ${mainnetTestingEnabled() ? "SOL" : "test SOL"} to the wallet.`
             : `Your public balance covers at most ${pub(exactSol(budget))} SOL, after the network fee and rent and what must stay in the wallet.`;
       }
     }
@@ -702,8 +693,6 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
                   <>
                     Public balance <Amount lamports={publicBalance} /> SOL.
                   </>
-                ) : heldUntil !== null ? (
-                  `Your public balance is not read so soon after a private spend. It can be read after ${clockText(heldUntil)}.`
                 ) : (
                   "Reading your public balance."
                 )}{" "}

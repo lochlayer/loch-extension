@@ -5,6 +5,7 @@
 import { shortAddress as designShortAddress } from "@loch/design/numerals";
 
 import { displaySol, exactSol } from "./amounts.js";
+import { mainnetTestingEnabled } from "./build.js";
 import type { ActivityEntry, Failure, FlowKind, FlowView, StageView } from "./view.js";
 
 /** The first and last four characters, as the design system writes them. A shielded address keeps "loch1" whole. */
@@ -397,7 +398,7 @@ export function failureCopy(failure: Failure, context: FailureContext): FailureC
         title: "Not enough public balance",
         lines: [
           `This deposit needs ${sol(failure.limit)} SOL: the amount, ${pub("0.00191704")} SOL for the network fee and rent, and ${pub("0.00089088")} SOL that must stay in the wallet. The wallet has ${sol(failure.amount)} SOL.`,
-          "Nothing moved. Enter a smaller amount, or add test SOL to the wallet.",
+          `Nothing moved. Enter a smaller amount, or add ${mainnetTestingEnabled() ? "SOL" : "test SOL"} to the wallet.`,
         ],
         settings: false,
       };

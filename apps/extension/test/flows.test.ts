@@ -1,5 +1,5 @@
 import { vaultPda } from "@loch/sdk";
-import { Keypair } from "@solana/web3.js";
+import { Keypair, VersionedTransaction } from "@solana/web3.js";
 import { describe, expect, it } from "vitest";
 
 import type { DiveRecord, SpendRecord, UnlockRecord } from "../src/background/core.js";
@@ -8,6 +8,7 @@ import { handleUi } from "../src/background/router.js";
 import type { WalletRecord } from "../src/background/store.js";
 import { syncWalletNow } from "../src/background/sync.js";
 import { DEPOSIT_OVERHEAD, SYSTEM_RENT_MINIMUM } from "../src/shared/constants.js";
+import { fromBase64 } from "../src/shared/bytes.js";
 import type { Snapshot } from "../src/shared/view.js";
 import { CONNECT, type Harness, RELAYER, RPC, SCREENER, createHarness, settle } from "./harness.js";
 import { connect, dive, fund, otherPoolTransactions, shielded, strangerAddress } from "./steps.js";
@@ -298,6 +299,11 @@ describe("dive in", () => {
 
     expect(h.wallet.prompts.map((prompt) => prompt.kind)).toEqual(["signTransaction"]);
     expect(h.screener.requests).toEqual(["/v1/info", "/v1/screen"]);
+    // The wallet is shown the deposit with no signature in it (Phantom warns about one signed
+    // before it); the screener's signature is put back before sending.
+    const [prompt] = h.wallet.prompts;
+    const shown = VersionedTransaction.deserialize(fromBase64(prompt?.kind === "signTransaction" ? prompt.transaction : ""));
+    expect(shown.signatures.every((signature) => signature.every((byte) => byte === 0))).toBe(true);
     expect(h.chain.balance(h.wallet.address)).toBe(10n * SOL - 5n * SOL - DEPOSIT_OVERHEAD);
     expect(h.chain.balance(vaultPda())).toBe(SYSTEM_RENT_MINIMUM + 5n * SOL);
 

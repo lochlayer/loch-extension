@@ -31,10 +31,8 @@ const ACTIVITY_ICON: Record<ActivityEntry["kind"], IconName> = {
 
 const CLUSTER_NAME = { devnet: "Devnet", testnet: "Testnet", localnet: "Localnet", "mainnet-beta": "Mainnet" } as const;
 
-/** Why the public balance was not read, and when it can be. */
-export function heldText(until: number): string {
-  return `Not read now. Asking for your public balance next to a private spend would let the RPC endpoint link the two. It can be read after ${clockText(until)}.`;
-}
+/** How often the public balance is read again while Loch is open. */
+export const PUBLIC_BALANCE_EVERY_MS = 15_000;
 
 export function unitOf(snapshot: Snapshot): string {
   const cluster = snapshot.cluster ?? (mainnetTestingEnabled() ? "mainnet-beta" : "devnet");
@@ -130,7 +128,7 @@ function SyncStatus({ sync, onSync }: { sync: SyncView; onSync: () => void }) {
   );
 }
 
-/** The public balance and when it was read. It is read when the user asks, never by itself. */
+/** The public balance and when it was read. It is kept live while Loch is open (App). */
 function PublicBalance({ snapshot, onRead }: { snapshot: Snapshot; onRead: () => Promise<void> }) {
   const [reading, setReading] = useState(false);
   const read = snapshot.publicBalance !== null;
@@ -150,7 +148,7 @@ function PublicBalance({ snapshot, onRead }: { snapshot: Snapshot; onRead: () =>
           onClick={press}
           aria-busy={reading ? "true" : undefined}
           aria-label={read ? `Read ${at ? `at ${clockText(at)}` : "earlier"}. Read the public balance again` : "Read the public balance"}
-          title="Asks your RPC endpoint for this address’s balance. That request names your public address, so Loch makes it only when you ask, and not next to a private spend."
+          title="Asks your RPC endpoint for this address’s balance now. Loch also reads it every few seconds while it is open. That request names your public address."
         >
           {reading ? "Reading" : read ? (at ? `at ${clockText(at)}` : "Read again") : "Read"}
         </button>
@@ -335,7 +333,7 @@ function Home({ snapshot, api, go, open, toast }: { snapshot: Snapshot; api: Api
           {recent.length === 0 ? (
             <div class="empty">
               <p class="empty__title">No activity yet</p>
-              <p>Dive in to move test SOL from your public wallet into your shielded balance. The deposit is public. What you do after it is not.</p>
+              <p>Dive in to move {mainnetTestingEnabled() ? "SOL" : "test SOL"} from your public wallet into your shielded balance. The deposit is public. What you do after it is not.</p>
             </div>
           ) : (
             <ul class="activity">
@@ -426,6 +424,20 @@ export function App({ api }: { api: Api }) {
     void api.call({ loch: "ui", type: "flow-dismiss" });
   }, [flow?.id, flow?.status]);
 
+  // The public balance is kept live while Loch is open and in view: read on opening, every few
+  // seconds, and again whenever the activity changes (a deposit or a surface that just landed).
+  const active = snapshot?.active ?? null;
+  const latest = snapshot?.activity[0] ? `${snapshot.activity[0].id}:${snapshot.activity[0].status}` : "";
+  useEffect(() => {
+    if (!active) return;
+    const read = () => {
+      if (document.visibilityState === "visible") void api.call<PublicBalanceReply>({ loch: "ui", type: "public-balance" });
+    };
+    read();
+    const timer = setInterval(read, PUBLIC_BALANCE_EVERY_MS);
+    return () => clearInterval(timer);
+  }, [api, active, latest]);
+
   // A form that was open when the popup closed (the wallet took the focus) opens again.
   useEffect(() => {
     void api.draft().then((draft) => {
@@ -470,11 +482,10 @@ export function App({ api }: { api: Api }) {
     setSheet(null);
     void api.setDraft(null);
   };
-  // Asked for by the user. The worker may hold it back next to a private spend, and says so.
+  // The refresh control: read now, and say so when it fails.
   const readBalance = async () => {
     const reply = await api.call<PublicBalanceReply>({ loch: "ui", type: "public-balance" });
     if (!reply.ok) toast("The public balance was not read. Try again.", "caution");
-    else if (reply.value.status === "held") toast(heldText(reply.value.until), "plain");
     else if (reply.value.status === "unreachable") toast("The RPC endpoint did not answer. The public balance was not read.", "caution");
   };
   const go = (next: View) => {
@@ -597,7 +608,7 @@ export function App({ api }: { api: Api }) {
                   <h2 class="step__title t-display-3">
                     <span class="step__n">1</span>Dive in
                   </h2>
-                  <p>Move test SOL from your public wallet into the Loch. A screening service co-signs the deposit.</p>
+                  <p>Move {mainnetTestingEnabled() ? "SOL" : "test SOL"} from your public wallet into the Loch. A screening service co-signs the deposit.</p>
                   <p class="observer">
                     <span class="observer__label">An observer sees</span> your address, the amount, and that it went into the Loch.
                   </p>

@@ -30,7 +30,6 @@ import { addActivity } from "./activity.js";
 import { type ClaimRecord, type Core, fail } from "./core.js";
 import { base, begin, synced, unlocked, wireDetail, wireReason } from "./flows.js";
 import { assertAllowedCluster, readCluster } from "./network.js";
-import { noteSpend } from "./publicBalance.js";
 import { addRecord, recordOf } from "./records.js";
 import type { WalletRuntime } from "./store.js";
 import { syncWalletNow } from "./sync.js";
@@ -92,7 +91,6 @@ async function succeed(core: Core, runtime: WalletRuntime, flow: ClaimRecord): P
     ...(flow.signature ? { signature: flow.signature } : {}),
   });
   await core.store.saveActivity(runtime);
-  await noteSpend(core, flow.address);
   await core.enter(flow, "done", "done");
 }
 
@@ -187,7 +185,6 @@ export async function stepClaim(core: Core, flow: ClaimRecord): Promise<void> {
         flow.handed = true;
         await core.saveFlow(flow);
       }
-      await noteSpend(core, flow.address);
       let response;
       try {
         response = await relayer.relay(flow.request);

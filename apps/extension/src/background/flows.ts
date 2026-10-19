@@ -70,7 +70,7 @@ import { BRIDGE_TTL_MS, type Core, type DiveRecord, FlowFailure, type FlowProof,
 import { type Chain, MainnetRefusedError, assertAllowedCluster, describeNetworkError, isNetworkFailure, readCluster } from "./network.js";
 import { payeeOf } from "./paymentCode.js";
 import { type PendingSpend, chainRootsOf, hasLanded, inputSpent, onlyNotes, proofExpired, spendableNotes, withLocks } from "./pending.js";
-import { noteSpend, storePublicBalance } from "./publicBalance.js";
+import { storePublicBalance } from "./publicBalance.js";
 import { addRecord, recordOf } from "./records.js";
 import type { WalletRuntime } from "./store.js";
 import { syncWalletNow } from "./sync.js";
@@ -480,7 +480,10 @@ async function stepDive(core: Core, flow: DiveRecord): Promise<void> {
       const instruction = buildTransactInstruction(decodeTransactArgs(fromBase64(flow.data)), { signer: depositor, screener: config.screener });
       const { blockhash, lastValidBlockHeight } = await chain.connection.getLatestBlockhash("confirmed");
       const transaction = buildTransactTransaction({ instruction, payer: depositor, recentBlockhash: blockhash });
-      // The screener signs first and the wallet second: wallets keep signatures that are already there.
+      // The screener is asked first, so a refused deposit never reaches the wallet, but the wallet
+      // is shown the transaction with no signature in it: Phantom warns about a transaction that
+      // someone else signed before it ("have Phantom sign first"). A signature covers the message
+      // only, so the screener's is kept here and put back next to the wallet's (diveAnswer).
       try {
         applyScreenerSignature(transaction, await core.env.screener(settings, chain).screen(toScreenRequest(transaction)));
       } catch (error) {
@@ -491,7 +494,8 @@ async function stepDive(core: Core, flow: DiveRecord): Promise<void> {
       delete flow.signed;
       const cluster = await readCluster(chain.connection);
       await core.enter(flow, "signing");
-      await ask(core, flow, { kind: "signTransaction", wallet: flow.walletName, address: flow.address, transaction: flow.unsigned, chain: chainOf(cluster.cluster) });
+      const bare = toBase64(new VersionedTransaction(transaction.message).serialize());
+      await ask(core, flow, { kind: "signTransaction", wallet: flow.walletName, address: flow.address, transaction: bare, chain: chainOf(cluster.cluster) });
       return;
     }
     case "signing":
@@ -636,8 +640,14 @@ async function diveAnswer(core: Core, flow: DiveRecord, answer: BridgeAnswer): P
   const message = ours.message.serialize();
   if (!bytesEqual(message, theirs.message.serialize())) throw fail("wallet-changed-transaction", { retry: true });
   const signers = ours.message.staticAccountKeys.slice(0, ours.message.header.numRequiredSignatures);
+  // The wallet signed a copy without the screener's signature: only its own is taken from it.
+  const depositor = new PublicKey(flow.address);
+  const own = signers.findIndex((signer) => signer.equals(depositor));
+  const wallets = theirs.signatures[own];
+  if (own < 0 || !wallets) throw fail("wallet-changed-transaction", { retry: true });
+  ours.signatures[own] = wallets;
   for (const [index, signer] of signers.entries()) {
-    const signature = theirs.signatures[index];
+    const signature = ours.signatures[index];
     let valid = false;
     try {
       valid = signature !== undefined && ed25519.verify(signature, message, signer.toBytes());
@@ -646,9 +656,9 @@ async function diveAnswer(core: Core, flow: DiveRecord, answer: BridgeAnswer): P
     }
     if (!valid) throw fail("wallet-changed-transaction", { retry: true });
   }
-  flow.signed = toBase64(theirs.serialize());
+  flow.signed = toBase64(ours.serialize());
   // A transaction's id is its first signature, so it is known before anything is sent.
-  flow.signature = base58.encode(theirs.signatures[0]!);
+  flow.signature = base58.encode(ours.signatures[0]!);
   await closeBridgeTab(core);
   await core.enter(flow, "sending");
 }
@@ -748,7 +758,6 @@ async function succeed(core: Core, runtime: WalletRuntime, flow: SpendRecord): P
   runtime.activity = addActivity(runtime.activity, spendActivity(runtime, flow, "confirmed", core.env.now()));
   await core.store.saveActivity(runtime);
   if (runtime.pending.some((entry) => entry.flowId === flow.id)) await releasePending(core, runtime, flow.id, "keep");
-  await noteSpend(core, flow.address);
   await core.enter(flow, "done", "done");
 }
 
@@ -933,7 +942,6 @@ async function stepSpend(core: Core, flow: SpendRecord): Promise<void> {
         flow.handed = true;
         await core.saveFlow(flow);
       }
-      await noteSpend(core, flow.address);
       let response;
       try {
         response = await relayer.relay(flow.request);

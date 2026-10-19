@@ -341,7 +341,8 @@ export class ScreenerClient extends WireClient {
   /**
    * `POST /v1/screen`: asks the screening authority to co-sign a deposit
    * (`toScreenRequest(transaction)`). Apply the answer with
-   * `applyScreenerSignature`, then let the wallet sign.
+   * `applyScreenerSignature` to the transaction the wallet signed: show the
+   * wallet a copy with no signatures, as Phantom warns about one signed before it.
    */
   screen(request: ScreenRequest, signal?: AbortSignal): Promise<ScreenResponse> {
     return this.call("POST", "/v1/screen", request, validateScreenResponse, signal, this.timeoutMs);

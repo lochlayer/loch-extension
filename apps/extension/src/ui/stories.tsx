@@ -13,6 +13,7 @@ import { render } from "preact";
 import type { Flow as ScanFlow, LeakReport } from "@loch/scanner-core";
 
 import type { ActivityEntry, AddressCheck, Failure, FlowView, PaymentCodeReply, PublicBalanceReply, Quote, ScanView, Snapshot, SurfaceWarningView, UiReply, UiRequest } from "../shared/view.js";
+import { mainnetTestingEnabled } from "../shared/build.js";
 import type { Api, Draft } from "./api.js";
 import { App } from "./App.js";
 
@@ -26,6 +27,9 @@ const SHIELDED = "loch1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4kqw508d6qejxtdg4y5
 const RECIPIENT = "loch17yk2n6v0h8s4x3q9zr5c7d2f8g6j4m0p3w9t5e7a2u6l8y4k0v3n9s5x7q2z8r4c6d0f2g8j6mh3p9w5t7e3a0u2l4y6k8v0n2s4x6q8z0rmq4d";
 /** The payment code of the test vectors in docs/protocol.md. */
 const PAYMENT_CODE = "lochpay1q87ep4a7lwncng5nw8hhst92u0nu49c3u6d5evle76kee3wzph57mljdndnkyt92jgjudplsxjf80nszkrh3ng58cdcrm64pmxzgvcfd323ddheptfsehytkcj36ce325yep3gvlm84p03r88jm6rafud5ws8y5m";
+// Built with LOCH_MAINNET_TESTING=1, the fixtures are those of the mainnet package and its services.
+const MAINNET = mainnetTestingEnabled();
+const CLUSTER = MAINNET ? "mainnet-beta" : "devnet";
 const SIG = "5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW";
 
 const activity: ActivityEntry[] = [
@@ -91,11 +95,11 @@ const base: Snapshot = {
   revision: 1,
   version: "0.1.0",
   settings: {
-    rpcUrl: "https://api.devnet.solana.com",
-    relayerUrl: "https://relayer.devnet.loch.example",
-    screenerUrl: "https://screener.devnet.loch.example",
-    connectUrl: "https://connect.loch.example/",
-    connectFixed: false,
+    rpcUrl: MAINNET ? "https://rpc.lochlayer.com" : "https://api.devnet.solana.com",
+    relayerUrl: MAINNET ? "https://relayer-mainnet.lochlayer.com" : "https://relayer.devnet.loch.example",
+    screenerUrl: MAINNET ? "https://screener-mainnet.lochlayer.com" : "https://screener.devnet.loch.example",
+    connectUrl: MAINNET ? "https://connect.lochlayer.com/connect.html" : "https://connect.loch.example/",
+    connectFixed: MAINNET,
     theme: "dusk",
     wrapperEnabled: true,
     warnFirstRecipients: false,
@@ -104,7 +108,7 @@ const base: Snapshot = {
   },
   wallets: [{ address: WALLET, walletName: "Phantom", unlocked: true }],
   active: WALLET,
-  cluster: "devnet",
+  cluster: CLUSTER,
   publicBalance: "41207400000",
   publicBalanceAt: NOW - 3 * 60_000,
   shielded: { address: SHIELDED, balance: "12480739112", spendable: "12480739112", largestPair: "12480739112", notes: 2, settling: 0 },
@@ -122,7 +126,7 @@ const base: Snapshot = {
   },
 };
 
-const CONNECT_URL = "https://connect.loch.example/";
+const CONNECT_URL = MAINNET ? "https://connect.lochlayer.com/connect.html" : "https://connect.loch.example/";
 
 const flow = (over: Partial<FlowView> & Pick<FlowView, "kind" | "step" | "status">): FlowView => ({
   id: "f1",
@@ -136,11 +140,11 @@ const flow = (over: Partial<FlowView> & Pick<FlowView, "kind" | "step" | "status
   ...over,
 });
 const failed = (kind: FlowView["kind"], step: string, failure: Failure, over: Partial<FlowView> = {}): FlowView =>
-  flow({ kind, step, status: "failed", failure, cancellable: false, amount: "1250000000", fee: "5000", to: RECIPIENT, ...over });
+  flow({ kind, step, status: "failed", failure, cancellable: false, amount: "1250000000", fee: "2500000", to: RECIPIENT, ...over });
 
-const sendFlow = { amount: "1250000000", fee: "5000", to: RECIPIENT };
-const quoteSpend: Quote = { cluster: "devnet", pool: null, relayer: { fee: "2500000", minWithdrawal: "1000000", address: DEST }, screener: null };
-const quoteDive: Quote = { cluster: "devnet", pool: { maxDeposit: "10000000000", paused: false }, relayer: null, screener: { maxDeposit: "10000000000", policy: "Deposits from sanctioned addresses are refused." } };
+const sendFlow = { amount: "1250000000", fee: "2500000", to: RECIPIENT };
+const quoteSpend: Quote = { cluster: CLUSTER, pool: null, relayer: { fee: "2500000", minWithdrawal: "1000000", address: DEST }, screener: null };
+const quoteDive: Quote = { cluster: CLUSTER, pool: { maxDeposit: "10000000000", paused: false }, relayer: null, screener: { maxDeposit: "10000000000", policy: "Deposits from sanctioned addresses are refused." } };
 
 interface Story {
   snapshot: Snapshot;
@@ -255,13 +259,6 @@ const STORIES: Record<string, Story> = {
 
   "dive-form": { snapshot: base, draft: { kind: "dive", to: "", amount: "5" }, quote: quoteDive },
   "dive-form-above-max": { snapshot: base, draft: { kind: "dive", to: "", amount: "12.5" }, quote: quoteDive },
-  // Opened right after a private spend: the worker does not read the public balance yet.
-  "dive-form-balance-held": {
-    snapshot: { ...base, publicBalance: null, publicBalanceAt: null },
-    draft: { kind: "dive", to: "", amount: "5" },
-    quote: quoteDive,
-    balance: { status: "held", until: NOW + 7 * 60_000 },
-  },
   "dive-form-paused": { snapshot: base, draft: { kind: "dive", to: "", amount: "5" }, quote: { ...quoteDive, pool: { maxDeposit: "10000000000", paused: true } } },
   "dive-screening": { snapshot: { ...base, flow: flow({ kind: "dive", step: "screening", status: "running", amount: "5000000000", walletName: "Phantom", proofKept: true }) } },
   "dive-signing": { snapshot: { ...base, flow: flow({ kind: "dive", step: "signing", status: "waiting", amount: "5000000000", walletName: "Phantom", proofKept: true }) } },

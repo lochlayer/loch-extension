@@ -69,15 +69,15 @@ test("connect and unlock: one wallet, the same signature twice, the connect page
   expect(context.pages().filter((page) => page.url().startsWith(world.urls.connect))).toEqual([]);
 });
 
-test("home after sync: the public balance is not read until asked for, shielded balance as a sounding, the empty state", async () => {
-  // Connecting and syncing do not name the public address to the RPC endpoint.
-  await expect(popup.locator(".balance--public .figure.is-unsurveyed")).toHaveAttribute("aria-label", "Not read yet");
-  expect(world.chain.calls).not.toContain("getBalance");
-  await shot(popup, "03a-home-balance-unread");
-  await popup.locator(".balance--public").getByRole("button", { name: "Read the public balance" }).click();
+test("home after sync: the public balance is read live, shielded balance as a sounding, the empty state", async () => {
+  // The open popup reads the public balance by itself, and again when the control is pressed.
   await expect(popup.locator(".balance--public .figure")).toHaveText("12.000");
   await expect(popup.locator(".balance--public .link--quiet")).toContainText(/^at \d\d:\d\d$/);
-  expect(world.chain.calls.filter((method) => method === "getBalance")).toHaveLength(1);
+  const reads = () => world.chain.calls.filter((method) => method === "getBalance").length;
+  const before = reads();
+  expect(before).toBeGreaterThan(0);
+  await popup.locator(".balance--public .link--quiet").click();
+  await expect.poll(reads).toBeGreaterThan(before);
   await expect(popup.locator(".balance--shielded .link--quiet").first()).toContainText("Synced");
   await expect(popup.getByText("Nothing in the Loch yet.")).toBeVisible();
   await expect(popup.getByText("No activity yet")).toBeVisible();

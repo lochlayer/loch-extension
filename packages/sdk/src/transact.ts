@@ -354,9 +354,9 @@ export interface PrepareDepositParams {
  * The shielded note is worth `amount - fee`.
  *
  * The deposit is public: the depositor's wallet and the amount are visible on
- * chain. Next: build the transaction with the depositor as payer, have the
- * screener sign it (`ScreenerClient.screen`, `applyScreenerSignature`), then
- * the wallet.
+ * chain. Next: build the transaction with the depositor as payer, ask the
+ * screener (`ScreenerClient.screen`), have the wallet sign a copy with no
+ * signatures, then add the screener's (`applyScreenerSignature`).
  *
  * @throws LochError `DEPOSITS_PAUSED`, `DEPOSIT_TOO_LARGE`, `INVALID_ARGUMENT`.
  */

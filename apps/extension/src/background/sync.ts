@@ -1,7 +1,7 @@
 // Sync: bring one wallet's view of the chain up to date. It asks for what every Loch client
 // asks for and nothing else: the genesis hash, the history of the pool's tree address, the
 // transactions in it, and the tree account. It never names the wallet's public address (the
-// public balance is read elsewhere, only when the user asks: publicBalance.ts), and it never
+// public balance is read elsewhere, for the interface: publicBalance.ts), and it never
 // blocks the interface: the snapshot keeps showing the last state while this runs.
 
 import { SyncError, createWalletState, fetchTreeAccount, paymentCodeCounts, syncWallet } from "@loch/sdk";

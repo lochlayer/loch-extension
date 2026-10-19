@@ -2,7 +2,9 @@
 // demonstrations (extsec-review/unit/privacy.test.ts and browser/attack.spec.ts, test D).
 //
 //   finding 3   a website cannot test whether an address is this browser's Loch wallet
-//   finding 6   the public address is not named to the RPC endpoint around a private spend
+//   finding 6   a spend or a sync does not name the public address to the RPC endpoint (the
+//               interface reads the public balance live, next to a spend too: the owner's
+//               decision of 2026-10-19)
 //   finding 9   "forget this wallet" holds against a sync or a scan that is under way
 //   item 12     a first-time recipient does not interrupt unless the user asked for that
 
@@ -10,7 +12,6 @@ import { Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js"
 import { describe, expect, it } from "vitest";
 
 import { startSpend } from "../src/background/flows.js";
-import { QUIET_AFTER_SPEND_MS } from "../src/background/publicBalance.js";
 import { reviewTransactions } from "../src/background/review.js";
 import { handleContent, handleUi } from "../src/background/router.js";
 import { syncWalletNow } from "../src/background/sync.js";
@@ -206,33 +207,20 @@ describe("finding 6: the public address is not named to the RPC endpoint around 
     expect(bodies.filter((body) => body.includes(h.wallet.address))).toHaveLength(1);
   });
 
-  it("the balance is not read during a private spend, nor for a while after one, even when asked", async () => {
+  it("the balance is read when asked during a private spend and right after one (no quiet period)", async () => {
     const h = createHarness();
     await connect(h);
     fund(h, 20n * SOL);
     await dive(h, 2n * SOL);
-    const { bodies } = record(h);
-    const named = () => bodies.filter((body) => body.includes(h.wallet.address)).length;
 
     h.relayer.script.push("hang");
     await startSpend(h.core, "send", { to: strangerAddress(), amount: SOL / 2n, fee: FEE });
     await settle(h, (flow) => flow.step === "sending" && h.relayer.requests.some((request) => request.path === "/v1/relay"));
-    expect(await readBalance(h)).toMatchObject({ status: "held" });
-    expect(named()).toBe(0);
+    expect(await readBalance(h)).toMatchObject({ status: "read" });
 
-    // The spend ends (here: the worker restarts and finds it unsettled).
-    const again = h.restart();
-    await again.core.clearFlow();
-    const reply = await readBalance(again);
-    expect(reply).toEqual({ status: "held", until: expect.any(Number) });
-    again.clock.now += QUIET_AFTER_SPEND_MS - 1000;
-    expect(await readBalance(again)).toMatchObject({ status: "held" });
-    expect(named()).toBe(0);
-    again.clock.now += 2000;
-    expect(await readBalance(again)).toMatchObject({ status: "read" });
   });
 
-  it("a finished spend starts the same quiet period", async () => {
+  it("a finished spend does not hold the balance back either", async () => {
     const h = createHarness();
     await connect(h);
     fund(h, 20n * SOL);
@@ -240,9 +228,7 @@ describe("finding 6: the public address is not named to the RPC endpoint around 
     await startSpend(h.core, "surface", { to: Keypair.generate().publicKey.toBase58(), amount: SOL / 2n, fee: FEE });
     expect((await settle(h)).status).toBe("done");
     await h.core.clearFlow();
-    expect(await readBalance(h)).toEqual({ status: "held", until: h.clock.now + QUIET_AFTER_SPEND_MS });
-    // The balance read before the spend stays on screen, with the time it was read at.
-    expect((await snap(h)).publicBalance).not.toBeNull();
+    expect(await readBalance(h)).toEqual({ status: "read", lamports: expect.any(String), at: h.clock.now });
   });
 
   it("a dive-in reads it: a deposit is public and comes from that address", async () => {
