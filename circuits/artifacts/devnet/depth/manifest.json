@@ -1,0 +1,85 @@
+{
+  "name": "loch-depth",
+  "network": "devnet",
+  "warning": "Single-contributor development setup, not a ceremony. Whoever ran it could forge depth proofs (not spend from the pool: the program does not use this circuit).",
+  "generatedAt": "2026-10-20T08:14:16.604Z",
+  "circuit": {
+    "entry": "circuits/depth.circom",
+    "main": "Depth(20, 4)",
+    "curve": "bn128",
+    "protocol": "groth16",
+    "merkleLevels": 20,
+    "notes": 4,
+    "publicSignals": [
+      "root",
+      "threshold",
+      "challenge",
+      "nullifier[0]",
+      "nullifier[1]",
+      "nullifier[2]",
+      "nullifier[3]"
+    ],
+    "sources": {
+      "depth.circom": {
+        "sha256": "5100b765740c46686c293cb3b86a5dd48a19820631708663cd210de1f8014009"
+      },
+      "lib.circom": {
+        "sha256": "e9adb76d3badf3d6e26a651101ac07a4130d59901c8146241e3f6a60109d08f9"
+      }
+    }
+  },
+  "constraints": {
+    "prime": "21888242871839275222246405745257275088548364400416034343698204186575808495617",
+    "nonLinear": 23110,
+    "linear": 0,
+    "total": 23110,
+    "wires": 23193,
+    "publicInputs": 7,
+    "publicOutputs": 0,
+    "privateInputs": 93,
+    "labels": 74383
+  },
+  "toolchain": {
+    "circom": "2.2.3",
+    "circomFlags": [
+      "--r1cs",
+      "--wasm",
+      "--sym",
+      "--O2"
+    ],
+    "circomlib": "2.0.5",
+    "snarkjs": "0.7.6",
+    "node": "v22.22.1"
+  },
+  "r1cs": {
+    "sha256": "10fe17cb7afa39242c87c93a26d0a1103355e9319c5fdf1ba226cd19342143e0",
+    "bytes": 10899232,
+    "path": "build/depth/depth.r1cs",
+    "committed": false
+  },
+  "setup": {
+    "kind": "single-contributor development setup",
+    "contribution": "loch depth single dev contribution 2026-10-20T08:12:58Z",
+    "ptau": {
+      "file": "powersOfTau28_hez_final_15.ptau",
+      "power": 15,
+      "source": "Hermez perpetual powers of tau: powersOfTau28_hez_final_15.ptau from https://circom.info/powersOfTau28_hez_final_15.ptau, BLAKE2b-512 verified against the hash published in the snarkjs README",
+      "blake2b512": "982372c867d229c236091f767e703253249a9b432c1710b4f326306bfa2428a17b06240359606cfe4d580b10a5a1f63fbed499527069c18ae17060472969ae6e",
+      "committed": false
+    }
+  },
+  "files": {
+    "depth.wasm": {
+      "sha256": "15df3c86ac92f88c73516488da9baff0f2b1e8dc4586b2eac977843226347944",
+      "bytes": 2554507
+    },
+    "depth_final.zkey": {
+      "sha256": "68177ca103e507aefa85ac95f772f205b19db5cc92eccb4dfe17c36be4c5da70",
+      "bytes": 13725837
+    },
+    "verification_key.json": {
+      "sha256": "0f22f0210e4b35b984749d3eeec251c9793cfc7a9a618539741435b63abd7b5a",
+      "bytes": 4026
+    }
+  }
+}

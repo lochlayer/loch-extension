@@ -49,8 +49,8 @@ export interface ProofResult {
  * prover on another machine is a custodian of the wallet; keep proving on the
  * user's own device.
  */
-export interface Prover {
-  prove(input: CircuitInput): Promise<ProofResult>;
+export interface Prover<Input = CircuitInput> {
+  prove(input: Input): Promise<ProofResult>;
 }
 
 /** A snarkjs verification key (`verification_key.json`, parsed). */
@@ -87,10 +87,10 @@ export interface SnarkjsProverOptions {
  * membership and balance before proving, so this only happens with the wrong
  * circuit artifacts.
  */
-export function createSnarkjsProver(options: SnarkjsProverOptions): Prover {
+export function createSnarkjsProver<Input = CircuitInput>(options: SnarkjsProverOptions): Prover<Input> {
   const { wasm, zkey, singleThread = false } = options;
   return {
-    async prove(input: CircuitInput): Promise<ProofResult> {
+    async prove(input: Input): Promise<ProofResult> {
       try {
         const { proof, publicSignals } = await snarkjs.groth16.fullProve(
           input,

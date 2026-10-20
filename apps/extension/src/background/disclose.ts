@@ -1,27 +1,36 @@
 // What the user can take out of the wallet to show someone: a payment receipt, a
-// source-of-funds report, a viewing key, and the code of a claim link they paid for. Each is
-// made only when the interface asks for it, from the vault's records, and handed to the
-// interface as text. None of it is sent anywhere by Loch.
+// source-of-funds report, a viewing key, the code of a claim link they paid for, and a depth
+// proof. Each is made only when the interface asks for it, from the vault's records (a depth
+// proof from the synced notes), and handed to the interface as text. None of it is sent
+// anywhere by Loch.
 
 import {
+  type Cluster as DepthCluster,
   LochError,
   PROGRAM_ID,
   buildSourceReport,
   decodeShieldedAddress,
   encodeClaim,
+  encodeDepthProof,
   encodeReceipt,
   encodeSourceReport,
   encodeViewingKey,
   noteCommitment,
   nullifierOfOpening,
+  ownedNotes,
+  proveDepth,
   viewingKeyOf,
 } from "@loch/sdk";
 
 import { fromBase64 } from "../shared/bytes.js";
-import type { ClaimCodeReply, ReceiptReply, SourceReportReply, ViewingKeyReply } from "../shared/view.js";
+import { type Cluster, DEPTH_PAGE } from "../shared/constants.js";
+import type { ClaimCodeReply, DepthProofReply, ReceiptReply, SourceReportReply, ViewingKeyReply } from "../shared/view.js";
 import type { Core } from "./core.js";
+import { assertAllowedCluster, readCluster } from "./network.js";
+import { withLocks } from "./pending.js";
 import { landed, landedRecord, toTransactRecord } from "./records.js";
 import type { WalletRuntime } from "./store.js";
+import { syncWalletNow } from "./sync.js";
 
 async function active(core: Core): Promise<WalletRuntime> {
   const address = await core.store.active();
@@ -79,4 +88,39 @@ export async function claimCodeFor(core: Core, id: string): Promise<ClaimCodeRep
 
 export async function viewingKeyFor(core: Core): Promise<ViewingKeyReply> {
   return { key: encodeViewingKey(viewingKeyOf((await active(core)).keys)) };
+}
+
+/** The name a depth proof gives the cluster it is about. */
+export function depthCluster(cluster: Cluster): DepthCluster {
+  return cluster === "mainnet-beta" ? "mainnet" : cluster;
+}
+
+/**
+ * A depth proof for the active wallet: at least `threshold` lamports, answering `challenge`.
+ * The wallet syncs first, so the proof is made against the newest root and leaves out notes
+ * that are already spent; notes a spend from this device has a claim on are left out too. The
+ * notes it shows are remembered (`shown`), so that surfacing from one of them can be warned of.
+ */
+export async function depthProofFor(core: Core, threshold: bigint, challenge: string): Promise<DepthProofReply> {
+  const runtime = await active(core);
+  const { chain } = await core.chain();
+  const cluster = await readCluster(chain.connection);
+  assertAllowedCluster(cluster);
+  const sync = await syncWalletNow(core, runtime.address);
+  if (sync.status !== "synced" && sync.status !== "behind") throw new LochError("SYNC_FAILED", sync.detail ?? "the wallet could not sync");
+  const { depth, shown } = await proveDepth({
+    prover: core.env.depthProver,
+    keys: runtime.keys,
+    notes: ownedNotes(withLocks(runtime.state, runtime.pending)),
+    tree: core.store.tree(runtime),
+    threshold,
+    challenge,
+    cluster: depthCluster(cluster.cluster),
+    programId: PROGRAM_ID,
+  });
+  const commitments = shown.map((note) => note.commitment.toString());
+  runtime.shown = [...runtime.shown.filter((item) => !commitments.includes(item)), ...commitments];
+  await core.store.saveState(runtime);
+  const code = encodeDepthProof(depth);
+  return { code, link: `${DEPTH_PAGE}#${code}`, threshold: threshold.toString(), notes: shown.length };
 }

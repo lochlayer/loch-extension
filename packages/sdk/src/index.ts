@@ -179,4 +179,20 @@ export type {
   VerifyOptions,
 } from "./disclosure.js";
 
+export {
+  DEPTH_NOTES,
+  MAX_CHALLENGE_BYTES,
+  decodeDepthProof,
+  depthChallengeHash,
+  encodeDepthProof,
+  isDepthProof,
+  normalizeChallenge,
+  prepareDepthInput,
+  proveDepth,
+  selectDepthNotes,
+  verifyDepthProof,
+} from "./depth.js";
+export type { Cluster, DepthCircuitInput, DepthConnection, DepthParams, DepthProof, Groth16Verify, MadeDepthProof, PreparedDepth, VerifiedDepth, VerifyDepthOptions } from "./depth.js";
+export { DEPTH_VERIFICATION_KEY } from "./depthKey.generated.js";
+
 export * from "./wire.js";

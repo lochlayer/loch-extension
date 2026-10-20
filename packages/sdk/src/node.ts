@@ -9,6 +9,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import type { DepthCircuitInput } from "./depth.js";
 import { LochError } from "./errors.js";
 import { type Prover, type VerificationKey, createSnarkjsProver } from "./prover.js";
 
@@ -87,6 +88,27 @@ export async function loadProverArtifacts(dir: string = DEVNET_ARTIFACTS_DIR): P
 /** Reads and parses `verification_key.json` for `verifyProof`. */
 export async function loadVerificationKey(dir: string = DEVNET_ARTIFACTS_DIR): Promise<VerificationKey> {
   return JSON.parse(await readFile(artifactPaths(dir).verificationKey, "utf8")) as VerificationKey;
+}
+
+/**
+ * A prover for depth proofs (`circuits/artifacts/devnet/depth`), its two files
+ * checked against the manifest next to them.
+ */
+export async function createNodeDepthProver(options: { dir?: string; singleThread?: boolean } = {}): Promise<Prover<DepthCircuitInput>> {
+  const dir = options.dir ?? join(DEVNET_ARTIFACTS_DIR, "depth");
+  let wasm: Uint8Array;
+  let zkey: Uint8Array;
+  let manifest: { files?: Record<string, { sha256?: string }> };
+  try {
+    [wasm, zkey] = (await Promise.all(["depth.wasm", "depth_final.zkey"].map(async (name) => new Uint8Array(await readFile(join(dir, name)))))) as [Uint8Array, Uint8Array];
+    manifest = JSON.parse(await readFile(join(dir, "manifest.json"), "utf8"));
+  } catch (cause) {
+    throw new LochError("INVALID_ARGUMENT", `depth prover artifacts could not be read from ${dir}`, { cause });
+  }
+  for (const [name, bytes] of [["depth.wasm", wasm], ["depth_final.zkey", zkey]] as const) {
+    if (manifest.files?.[name]?.sha256 !== sha256Hex(bytes)) throw new LochError("INVALID_ARGUMENT", `${name} does not match manifest.json in ${dir}`);
+  }
+  return createSnarkjsProver<DepthCircuitInput>({ wasm, zkey, singleThread: options.singleThread });
 }
 
 /**

@@ -5,7 +5,7 @@
 //
 // Both take plain data and return plain data, so they run under test without a browser.
 
-import { AddressError, LochError, PROGRAM_ID, decodeRecipient, fetchPoolConfig } from "@loch/sdk";
+import { AddressError, LochError, PROGRAM_ID, decodeRecipient, fetchPoolConfig, ownedNotes, selectNotes } from "@loch/sdk";
 import { PublicKey } from "@solana/web3.js";
 
 import { fromLamportString } from "../shared/amounts.js";
@@ -16,6 +16,7 @@ import type {
   AddressCheck,
   ClaimCheck,
   ClaimCodeReply,
+  DepthProofReply,
   PaymentCodeReply,
   PublicBalanceReply,
   Quote,
@@ -30,7 +31,7 @@ import type {
 import { acceptBridgeAnswer, closeBridgeTab, noteContentScript } from "./bridge.js";
 import { checkClaim, startClaim } from "./claimFlow.js";
 import type { Core } from "./core.js";
-import { claimCodeFor, receiptFor, sourceReportFor, viewingKeyFor } from "./disclose.js";
+import { claimCodeFor, depthProofFor, receiptFor, sourceReportFor, viewingKeyFor } from "./disclose.js";
 import { cancelFlow, chooseWallet, dismissFlow, flowBridgeAnswer, retryFlow, startDive, startSpend, startUnlock } from "./flows.js";
 import { assertAllowedCluster, describeNetworkError, readCluster } from "./network.js";
 import { makePaymentCode, payeeOf } from "./paymentCode.js";
@@ -39,6 +40,7 @@ import { reviewTransactions } from "./review.js";
 import { cancelScan, startScan } from "./scan.js";
 import { type Settings, checkConnectUrl, checkEndpoint, saveSettings } from "./settings.js";
 import { forgetSiteAccount, noteSiteAccounts } from "./sites.js";
+import { withLocks } from "./pending.js";
 import { surfaceWarnings } from "./surfaceWarnings.js";
 import { stopSync, syncWalletNow } from "./sync.js";
 
@@ -64,6 +66,7 @@ const UI_TYPES = [
   "receipt",
   "source-report",
   "viewing-key",
+  "depth-proof",
   "surface",
   "consolidate",
   "surface-warnings",
@@ -103,6 +106,10 @@ export function parseUiRequest(value: unknown): UiRequest | null {
     case "claim":
       if (!isString(value.code, 400) || !isDecimalString(value.fee)) return null;
       return { loch: "ui", type: "claim", code: value.code, fee: value.fee };
+    case "depth-proof":
+      // The SDK holds the challenge to 128 bytes of UTF-8 once trimmed; this only bounds the message.
+      if (!isDecimalString(value.threshold) || !isString(value.challenge, 512)) return null;
+      return { loch: "ui", type: "depth-proof", threshold: value.threshold, challenge: value.challenge };
     case "claim-code":
     case "receipt":
     case "source-report":
@@ -210,6 +217,8 @@ export async function handleUi(core: Core, message: unknown): Promise<UiReply> {
         return ok<SourceReportReply>(await sourceReportFor(core, request.id));
       case "viewing-key":
         return ok<ViewingKeyReply>(await viewingKeyFor(core));
+      case "depth-proof":
+        return ok<DepthProofReply>(await depthProofFor(core, amountOf(request.threshold), request.challenge));
       case "surface":
         await startSpend(core, "surface", { to: new PublicKey(request.to).toBase58(), amount: amountOf(request.amount), fee: fromLamportString(request.fee) });
         return ok(null);
@@ -329,7 +338,15 @@ async function warningsForSurface(core: Core, destination: string, amount: bigin
     .filter((entry) => entry.kind === "dive" && entry.status !== "failed")
     .map((entry) => ({ amount: BigInt(entry.amount), at: entry.at, from: entry.counterparty ?? runtime.address }));
   const ownAddresses = (await core.store.wallets()).map((record) => record.address);
-  return surfaceWarnings({ amount, fee, destination, now: core.env.now(), deposits, ownAddresses }).map((warning) => ({
+  // The notes the withdrawal would spend, chosen as the flow will choose them. When they cannot
+  // be chosen the form says so itself, and there is no note to warn about.
+  let spends: string[] = [];
+  try {
+    spends = selectNotes(ownedNotes(withLocks(runtime.state, runtime.pending)), amount + fee).map((note) => note.commitment.toString());
+  } catch {
+    spends = [];
+  }
+  return surfaceWarnings({ amount, fee, destination, now: core.env.now(), deposits, ownAddresses, spends, shown: runtime.shown }).map((warning) => ({
     id: warning.id,
     ...(warning.deposit ? { amount: warning.deposit.amount.toString(), at: warning.deposit.at, from: warning.deposit.from } : {}),
   }));

@@ -421,17 +421,26 @@ export class FakePool {
       },
       getMultipleAccountsInfo: async (addresses: PublicKey[]) => {
         this.count("getMultipleAccountsInfo");
-        if (addresses.length > 100) throw new Error("getMultipleAccountsInfo takes at most 100 addresses");
-        return addresses.map((address) => {
-          if (this.nullifiers.has(address.toBase58())) {
-            return { owner: this.programId, lamports: 953_520, executable: false, data: new Uint8Array(9) };
-          }
-          const lamports = this.balanceOf(address);
-          return lamports > 0n ? { owner: SystemProgram.programId, lamports: Number(lamports), executable: false, data: new Uint8Array(0) } : null;
-        });
+        return this.accountsAt(addresses);
+      },
+      getMultipleAccountsInfoAndContext: async (addresses: PublicKey[]) => {
+        this.count("getMultipleAccountsInfo");
+        return { context: { slot: this.slot }, value: this.accountsAt(addresses) };
       },
       getMinimumBalanceForRentExemption: async () => this.rentExemptMinimum,
     };
+  }
+
+  private accountsAt(addresses: PublicKey[]) {
+    if (addresses.length > 100) throw new Error("getMultipleAccounts takes at most 100 addresses");
+    return addresses.map((address) => {
+      if (address.equals(treePda(this.programId))) return { owner: this.programId, lamports: 1, executable: false, data: this.treeAccountData() };
+      if (this.nullifiers.has(address.toBase58())) {
+        return { owner: this.programId, lamports: 953_520, executable: false, data: new Uint8Array(9) };
+      }
+      const lamports = this.balanceOf(address);
+      return lamports > 0n ? { owner: SystemProgram.programId, lamports: Number(lamports), executable: false, data: new Uint8Array(0) } : null;
+    });
   }
 
   private treeAccountData(): Uint8Array {

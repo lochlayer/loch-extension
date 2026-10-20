@@ -45,6 +45,12 @@ export const CLAIM_PREFIX = "lochclaim";
 /** Human-readable part of a viewing key (bech32m). */
 export const VIEWING_KEY_PREFIX = "lochview";
 
+/** Human-readable part of a depth proof (bech32m). */
+export const DEPTH_PREFIX = "lochdepth";
+
+/** Domain separator of a depth proof's challenge hash. */
+export const DEPTH_DOMAIN = "Loch depth proof v1";
+
 /** Domain separator of a claim's key seed: `sha256(utf8(this) || secret)`. */
 export const CLAIM_DOMAIN = "Loch claim v1";
 

@@ -10,7 +10,8 @@
 //                                     connect page is a setting, for development.
 //
 // Steps:
-//   1. Check the prover artifacts against circuits/artifacts/devnet/manifest.json (sha256 and size).
+//   1. Check the prover artifacts against circuits/artifacts/devnet/manifest.json and, for the
+//      depth proof, circuits/artifacts/devnet/depth/manifest.json (sha256 and size).
 //      A mismatch stops the build: the extension would produce proofs the program refuses.
 //   2. Build the extension pages (app.html, offscreen.html) and the service worker as ES modules.
 //   3. Build the content script and the page script as single classic scripts (IIFE): content
@@ -50,19 +51,28 @@ const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 // ---------------------------------------------------------------- 1. artifacts
 const artifactsDir = join(repo, "circuits/artifacts/devnet");
 const artifactManifest = JSON.parse(readFileSync(join(artifactsDir, "manifest.json"), "utf8"));
-const ARTIFACT_FILES = ["transaction.wasm", "transaction_final.zkey"];
+// The transaction circuit's files, and the depth proof's (circuits/artifacts/devnet/depth, its own
+// manifest). Each is checked against the manifest next to it, and all of them land side by side
+// in prover/: the names differ.
+const ARTIFACT_SETS = [
+  { dir: artifactsDir, manifest: artifactManifest, files: ["transaction.wasm", "transaction_final.zkey"] },
+  { dir: join(artifactsDir, "depth"), manifest: JSON.parse(readFileSync(join(artifactsDir, "depth", "manifest.json"), "utf8")), files: ["depth.wasm", "depth_final.zkey"] },
+];
+const ARTIFACT_FILES = ARTIFACT_SETS.flatMap((set) => set.files);
 const artifacts = {};
-for (const name of ARTIFACT_FILES) {
-  const expected = artifactManifest.files?.[name];
-  if (!expected) throw new Error(`build: ${name} is not listed in circuits/artifacts/devnet/manifest.json`);
-  const bytes = readFileSync(join(artifactsDir, name));
-  const actual = sha256(bytes);
-  if (actual !== expected.sha256 || bytes.length !== expected.bytes) {
-    throw new Error(
-      `build: ${name} does not match the manifest (sha256 ${actual}, ${bytes.length} bytes; expected ${expected.sha256}, ${expected.bytes} bytes). Refusing to build.`,
-    );
+for (const set of ARTIFACT_SETS) {
+  for (const name of set.files) {
+    const expected = set.manifest.files?.[name];
+    if (!expected) throw new Error(`build: ${name} is not listed in ${relative(repo, join(set.dir, "manifest.json"))}`);
+    const bytes = readFileSync(join(set.dir, name));
+    const actual = sha256(bytes);
+    if (actual !== expected.sha256 || bytes.length !== expected.bytes) {
+      throw new Error(
+        `build: ${name} does not match the manifest (sha256 ${actual}, ${bytes.length} bytes; expected ${expected.sha256}, ${expected.bytes} bytes). Refusing to build.`,
+      );
+    }
+    artifacts[name] = { sha256: actual, bytes: bytes.length };
   }
-  artifacts[name] = { sha256: actual, bytes: bytes.length };
 }
 // The connect page, when this build fixes it. It is where the wallet is asked for the signature
 // that is the key to the shielded balance, so the rules are those of the setting
@@ -199,7 +209,7 @@ for (const [name, entry] of [
 
 // ------------------------------------------------------------------ 4. statics
 mkdirSync(join(out, "prover"), { recursive: true });
-for (const name of ARTIFACT_FILES) cpSync(join(artifactsDir, name), join(out, "prover", name));
+for (const set of ARTIFACT_SETS) for (const name of set.files) cpSync(join(set.dir, name), join(out, "prover", name));
 
 // The in-page dialog (leak warnings, the key-derivation guard) is drawn by the content script
 // inside a closed shadow root. It uses the design system's own CSS, rewritten for a shadow root:

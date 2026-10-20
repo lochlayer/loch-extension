@@ -6,10 +6,10 @@
 // every open page of the extension: the popup, the expanded view.) The only thing broadcast is
 // a request to open that port, which says nothing.
 
-import { type CircuitInput, LochError, type ProofResult, type Prover } from "@loch/sdk";
+import { type CircuitInput, type DepthCircuitInput, LochError, type ProofResult, type Prover } from "@loch/sdk";
 
 import { isRecord } from "../shared/guards.js";
-import { OFFSCREEN_TARGET, PROVER_PORT, type ProveAnswer, type ProveReply, type ProveRequest } from "../shared/proverProtocol.js";
+import { OFFSCREEN_TARGET, PROVER_PORT, type ProveAnswer, type ProveReply, type ProveRequest, type ProverCircuit } from "../shared/proverProtocol.js";
 
 let creating: Promise<void> | null = null;
 let port: chrome.runtime.Port | null = null;
@@ -95,21 +95,28 @@ function serialise(value: unknown): unknown {
   return value;
 }
 
+async function proveOffscreen(circuit: ProverCircuit, input: unknown): Promise<ProofResult> {
+  await ensureOffscreen();
+  const channel = await proverPort();
+  const id = nextId++;
+  const reply = await new Promise<ProveReply>((resolve) => {
+    waiting.set(id, resolve);
+    try {
+      channel.postMessage({ type: "prove", id, circuit, input: serialise(input) } satisfies ProveRequest);
+    } catch {
+      waiting.delete(id);
+      resolve({ ok: false, message: "the prover could not be reached" });
+    }
+  });
+  if (!reply.ok) throw new LochError("PROOF_FAILED", reply.message);
+  return { proof: reply.proof, publicSignals: reply.publicSignals };
+}
+
 export const offscreenProver: Prover = {
-  async prove(input: CircuitInput): Promise<ProofResult> {
-    await ensureOffscreen();
-    const channel = await proverPort();
-    const id = nextId++;
-    const reply = await new Promise<ProveReply>((resolve) => {
-      waiting.set(id, resolve);
-      try {
-        channel.postMessage({ type: "prove", id, input: serialise(input) } satisfies ProveRequest);
-      } catch {
-        waiting.delete(id);
-        resolve({ ok: false, message: "the prover could not be reached" });
-      }
-    });
-    if (!reply.ok) throw new LochError("PROOF_FAILED", reply.message);
-    return { proof: reply.proof, publicSignals: reply.publicSignals };
-  },
+  prove: (input: CircuitInput) => proveOffscreen("transaction", input),
+};
+
+/** Depth proofs, in the same offscreen document. The witness holds the spending key here too. */
+export const offscreenDepthProver: Prover<DepthCircuitInput> = {
+  prove: (input: DepthCircuitInput) => proveOffscreen("depth", input),
 };

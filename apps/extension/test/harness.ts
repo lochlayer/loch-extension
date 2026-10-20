@@ -6,7 +6,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import { ed25519 } from "@noble/curves/ed25519";
-import { type CircuitInput, type Groth16Proof, LIGHTHOUSE_PROGRAM_ID, type Prover } from "@loch/sdk";
+import { type CircuitInput, type DepthCircuitInput, type Groth16Proof, LIGHTHOUSE_PROGRAM_ID, type Prover } from "@loch/sdk";
+import { createNodeDepthProver } from "@loch/sdk/node";
 import { RelayerClient, ScreenerClient } from "@loch/sdk/wire";
 import { scanAddressDetailed } from "@loch/scanner-core";
 import { Keypair, type MessageV0, VersionedTransaction } from "@solana/web3.js";
@@ -24,6 +25,13 @@ import type { BridgeAnswer, BridgeRequest, SenderLike } from "../src/shared/mess
 
 const VECTOR = JSON.parse(readFileSync(new URL("../../../circuits/artifacts/devnet/test_vector.json", import.meta.url), "utf8")) as {
   snarkjs: { proof: Groth16Proof };
+};
+
+// Depth proofs are real proofs: the verifier is the SDK, as it would be for a stranger. The
+// artifacts are read once per test file, when the first depth proof is asked for.
+let depthProverLoaded: Promise<Prover<DepthCircuitInput>> | null = null;
+const depthProver: Prover<DepthCircuitInput> = {
+  prove: async (input) => (await (depthProverLoaded ??= createNodeDepthProver({ singleThread: true }))).prove(input),
 };
 
 export const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
@@ -229,6 +237,7 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     relayer: (settings, c) => new RelayerClient(settings.relayerUrl, { fetch: (url, init) => c.fetch(url, init), relayTimeoutMs: 0, timeoutMs: 0 }),
     screener: (settings, c) => new ScreenerClient(settings.screenerUrl, { fetch: (url, init) => c.fetch(url, init), timeoutMs: 0 }),
     prover,
+    depthProver,
     tabs: {
       create: async ({ url }) => {
         const id = shared.nextTab.id++;

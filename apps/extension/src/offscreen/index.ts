@@ -5,15 +5,16 @@
 // to the service worker, so no other page of the extension receives it (a content script cannot
 // reach this page at all), and it is dropped as soon as the proof is made. Nothing here logs.
 
-import { type CircuitInput, createSnarkjsProver, type Prover } from "@loch/sdk";
+import { type CircuitInput, type DepthCircuitInput, createSnarkjsProver, type Prover } from "@loch/sdk";
 
 import { BUILD } from "../shared/build.js";
 import { isRecord } from "../shared/guards.js";
-import { OFFSCREEN_TARGET, PROVER_PORT, type ProveAnswer, type ProveReply } from "../shared/proverProtocol.js";
+import { OFFSCREEN_TARGET, PROVER_PORT, type ProveAnswer, type ProveReply, type ProverCircuit } from "../shared/proverProtocol.js";
 
 const IDLE_CLOSE_MS = 90_000;
 
-let prover: Promise<Prover> | null = null;
+/** One prover per circuit, each loaded the first time it is asked for. */
+const provers = new Map<ProverCircuit, Promise<Prover<CircuitInput | DepthCircuitInput>>>();
 let idle: ReturnType<typeof setTimeout> | undefined;
 let busy = 0;
 
@@ -31,15 +32,22 @@ async function loadArtifact(name: string): Promise<Uint8Array> {
   return bytes;
 }
 
-function getProver(): Promise<Prover> {
-  prover ??= (async () => {
-    const [wasm, zkey] = await Promise.all([loadArtifact("transaction.wasm"), loadArtifact("transaction_final.zkey")]);
-    // Workers cannot be started from blob: URLs under the extension's CSP, so one thread.
-    return createSnarkjsProver({ wasm, zkey, singleThread: true });
-  })();
-  prover.catch(() => {
-    prover = null;
-  });
+const FILES: Record<ProverCircuit, [string, string]> = {
+  transaction: ["transaction.wasm", "transaction_final.zkey"],
+  depth: ["depth.wasm", "depth_final.zkey"],
+};
+
+function getProver(circuit: ProverCircuit): Promise<Prover<CircuitInput | DepthCircuitInput>> {
+  let prover = provers.get(circuit);
+  if (!prover) {
+    prover = (async () => {
+      const [wasm, zkey] = await Promise.all(FILES[circuit].map(loadArtifact));
+      // Workers cannot be started from blob: URLs under the extension's CSP, so one thread.
+      return createSnarkjsProver<CircuitInput | DepthCircuitInput>({ wasm: wasm!, zkey: zkey!, singleThread: true });
+    })();
+    provers.set(circuit, prover);
+    prover.catch(() => provers.delete(circuit));
+  }
   return prover;
 }
 
@@ -48,12 +56,12 @@ function scheduleClose(): void {
   if (busy === 0) idle = setTimeout(() => window.close(), IDLE_CLOSE_MS);
 }
 
-async function prove(input: unknown): Promise<ProveReply> {
+async function prove(circuit: ProverCircuit, input: unknown): Promise<ProveReply> {
   const started = performance.now();
   try {
-    const instance = await getProver();
+    const instance = await getProver(circuit);
     // snarkjs reads decimal strings as field elements, so the witness needs no conversion back.
-    const { proof, publicSignals } = await instance.prove(input as CircuitInput);
+    const { proof, publicSignals } = await instance.prove(input as CircuitInput | DepthCircuitInput);
     return { ok: true, proof, publicSignals, ms: Math.round(performance.now() - started) };
   } catch (error) {
     // The SDK's proof errors carry the circuit location only, never a signal value.
@@ -74,10 +82,12 @@ function connect(): void {
   });
   opened.onMessage.addListener((message: unknown) => {
     if (!isRecord(message) || message.type !== "prove" || typeof message.id !== "number" || !isRecord(message.input)) return;
+    // A request from before the depth circuit names none: it is a transaction.
+    const circuit: ProverCircuit = message.circuit === "depth" ? "depth" : "transaction";
     const id = message.id;
     busy++;
     clearTimeout(idle);
-    void prove(message.input).then((reply) => {
+    void prove(circuit, message.input).then((reply) => {
       busy--;
       scheduleClose();
       try {

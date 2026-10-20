@@ -4,8 +4,9 @@
 //     settings                     endpoints and choices, in the clear
 //     wallets                      [{ address, walletName, addedAt, salt, check }], in the clear
 //     active                       the address the interface shows
-//     vault:<address>:state        the SDK wallet state (leaves, notes) and the
-//                                  spends sent but not yet seen on chain       ENCRYPTED
+//     vault:<address>:state        the SDK wallet state (leaves, notes), the
+//                                  spends sent but not yet seen on chain, and
+//                                  the notes shown in a depth proof            ENCRYPTED
 //     vault:<address>:activity     the activity log                            ENCRYPTED
 //     vault:<address>:records      the wallet's own transactions, opened: what
 //                                  receipts, reports and claim links are made
@@ -65,6 +66,12 @@ export interface WalletRuntime {
   ownOutputs: string[];
   /** This device's own transactions, opened (records.ts), oldest first. */
   records: TxRecord[];
+  /**
+   * Commitments (decimal) of unspent notes this device has shown in a depth proof. Whoever was
+   * given the proof can see when they are spent. Saved with the state; a note leaves the list
+   * once it is spent.
+   */
+  shown: string[];
 }
 
 /** How many of its own output commitments a wallet remembers. */
@@ -77,6 +84,7 @@ interface StoredState {
   neverSynced: boolean;
   pending?: unknown;
   ownOutputs?: unknown;
+  shown?: unknown;
 }
 
 const CHECK_VALUE = "loch";
@@ -170,6 +178,7 @@ export class Store {
       pending: [],
       ownOutputs: [],
       records: [],
+      shown: [],
     };
     this.runtimes.set(address, runtime);
     await this.saveState(runtime);
@@ -216,6 +225,7 @@ export class Store {
     let neverSynced = true;
     let pending: PendingSpend[] = [];
     let ownOutputs: string[] = [];
+    let shown: string[] = [];
     const storedState = await this.local.get<unknown>(`vault:${address}:state`);
     if (storedState !== undefined) {
       // A state that does not open or does not parse is not kept: a full sync restores it.
@@ -232,6 +242,7 @@ export class Store {
           );
         }
         if (Array.isArray(opened.ownOutputs)) ownOutputs = opened.ownOutputs.filter((item): item is string => typeof item === "string");
+        if (Array.isArray(opened.shown)) shown = opened.shown.filter((item): item is string => typeof item === "string");
       } catch (error) {
         if (error instanceof VaultError && error.reason === "wrong-key") throw error;
         state = createWalletState(keys);
@@ -254,6 +265,7 @@ export class Store {
       pending,
       ownOutputs,
       records,
+      shown,
     };
     // Forgotten while this was being read: there is no such wallet any more.
     if (this.forgotten.has(address)) return null;
@@ -292,7 +304,10 @@ export class Store {
 
   async saveState(runtime: WalletRuntime): Promise<boolean> {
     if (runtime.ownOutputs.length > MAX_OWN_OUTPUTS) runtime.ownOutputs = runtime.ownOutputs.slice(-MAX_OWN_OUTPUTS);
-    const stored: StoredState = { state: runtime.state, neverSynced: runtime.neverSynced, pending: runtime.pending, ownOutputs: runtime.ownOutputs };
+    // A shown note that has been spent has nothing left to give away.
+    const unspent = new Set(runtime.state.notes.filter((note) => !note.spent).map((note) => note.commitment));
+    runtime.shown = runtime.shown.filter((commitment) => unspent.has(commitment));
+    const stored: StoredState = { state: runtime.state, neverSynced: runtime.neverSynced, pending: runtime.pending, ownOutputs: runtime.ownOutputs, shown: runtime.shown };
     return this.write(runtime, "state", stored);
   }
 

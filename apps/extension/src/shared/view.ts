@@ -313,6 +313,8 @@ export type UiRequest =
   | { loch: "ui"; type: "source-report"; id: string }
   /** The active wallet's viewing key. */
   | { loch: "ui"; type: "viewing-key" }
+  /** A depth proof: the active wallet holds at least `threshold` lamports, answering the verifier's `challenge`. */
+  | { loch: "ui"; type: "depth-proof"; threshold: string; challenge: string }
   | { loch: "ui"; type: "surface"; to: string; amount: string; fee: string }
   | { loch: "ui"; type: "consolidate"; fee: string }
   | { loch: "ui"; type: "surface-warnings"; to: string; amount: string; fee: string }
@@ -380,13 +382,25 @@ export interface ViewingKeyReply {
   key: string;
 }
 
+/** The answer to "depth-proof". Nothing in it is secret: it is meant to be handed over. */
+export interface DepthProofReply {
+  /** The proof as text (lochdepth1...). */
+  code: string;
+  /** The verification page with the code after "#". */
+  link: string;
+  /** Lamports the proof says the wallet holds at least. */
+  threshold: string;
+  /** How many notes it shows. */
+  notes: number;
+}
+
 /** The answer to "public-balance". */
 export type PublicBalanceReply =
   | { status: "read"; lamports: string; at: number }
   | { status: "unreachable"; detail: string };
 
 export interface SurfaceWarningView {
-  id: "same-address" | "same-amount" | "soon-after";
+  id: "same-address" | "same-amount" | "soon-after" | "shown";
   /** The deposit the warning points at: lamports, when, and the address it came from. */
   amount?: string;
   at?: number;

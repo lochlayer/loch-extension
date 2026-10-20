@@ -5,9 +5,16 @@
 //   same-amount    the amount equals a recent dive-in (or that dive-in less the fee)
 //   soon-after     the withdrawal follows a dive-in closely
 //
+// A fourth ties the withdrawal to the wallet itself, for one reader:
+//
+//   shown          it spends a note this wallet showed in a depth proof; whoever was given the
+//                  proof knows that note's nullifier, so they see it spent here and learn where
+//                  the wallet surfaced. A send to the wallet's own address first cuts that: the
+//                  new notes' nullifiers are in no proof.
+//
 // Pure: no clock, no network. The interface shows each warning and lets the user go on.
 
-export type SurfaceWarningId = "same-address" | "same-amount" | "soon-after";
+export type SurfaceWarningId = "same-address" | "same-amount" | "soon-after" | "shown";
 
 export interface SurfaceWarning {
   id: SurfaceWarningId;
@@ -32,6 +39,10 @@ export interface SurfaceWarningInput {
   deposits: readonly KnownDeposit[];
   /** Public addresses connected on this device. */
   ownAddresses: readonly string[];
+  /** Commitments of the notes the withdrawal would spend. */
+  spends?: readonly string[];
+  /** Commitments of unspent notes shown in a depth proof. */
+  shown?: readonly string[];
 }
 
 /** A dive-in this recent makes a withdrawal easy to pair with it. */
@@ -55,6 +66,9 @@ export function surfaceWarnings(input: SurfaceWarningInput): SurfaceWarning[] {
 
   const recent = newestFirst.find((deposit) => deposit.at <= now && now - deposit.at <= SOON_AFTER_MS);
   if (recent) warnings.push({ id: "soon-after", deposit: recent });
+
+  const shown = new Set(input.shown ?? []);
+  if ((input.spends ?? []).some((commitment) => shown.has(commitment))) warnings.push({ id: "shown" });
 
   return warnings;
 }

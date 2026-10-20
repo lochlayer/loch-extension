@@ -6,7 +6,7 @@
 // Nothing that matters is held only in memory: a flow is written to chrome.storage.session
 // before each step and after it, and `resume` decides what an interrupted step means.
 
-import type { Prover, RelayRequest, RelayResponse, RelayerInfo, ScreenRequest, ScreenResponse, ScreenerInfo } from "@loch/sdk";
+import type { DepthCircuitInput, Prover, RelayRequest, RelayResponse, RelayerInfo, ScreenRequest, ScreenResponse, ScreenerInfo } from "@loch/sdk";
 import type { ScanOptions, ScanResult } from "@loch/scanner-core";
 
 import { BUILD, fixedConnectUrl } from "../shared/build.js";
@@ -60,6 +60,8 @@ export interface Env {
   screener(settings: Settings, chain: Chain): ScreenerApi;
   /** Proves in the offscreen document. */
   prover: Prover;
+  /** Proves depth proofs, in the same document. */
+  depthProver: Prover<DepthCircuitInput>;
   tabs: TabsApi;
   /** Tells open extension pages that the snapshot changed. */
   notify(): void;

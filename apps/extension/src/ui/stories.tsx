@@ -375,6 +375,19 @@ const STORIES: Record<string, Story> = {
   },
   "send-form-link": { snapshot: base, draft: { kind: "send", to: "", amount: "0.5" }, quote: quoteSpend, after: chain(() => undefined, click("#form-send-form .toggle")) },
   "receive-collect": { snapshot: base, after: chain(click("a.link--quiet", "Receive"), reveal("#collect-title", "start")) },
+  "settings-depth": { snapshot: base, after: chain(...SETTINGS, reveal("#set-depth", "start")) },
+  // The proof is made: the code, the link, and what it shows and costs.
+  "settings-depth-made": {
+    snapshot: base,
+    after: chain(...SETTINGS, type("#depth-amount", "5"), type("#depth-challenge", "OTC desk 2026-10-20 #7f3a"), click(".settings button", "Make the proof"), reveal("#set-depth", "start")),
+  },
+  "surface-form-shown": {
+    snapshot: base,
+    draft: { kind: "surface", to: DEST, amount: "2" },
+    quote: quoteSpend,
+    address: { ok: true, address: DEST, own: false },
+    warnings: [{ id: "shown" }],
+  },
   "settings-viewing-key": { snapshot: base, after: chain(click(".address-chip"), click(".picklist__row", "SettingsEndpoints, palette, this device"), click(".settings button", "Show viewing key"), reveal("#set-viewing", "start")) },
   "activity-open": { snapshot: { ...base, activity }, after: chain(click(".popup__deep-head a", "All activity"), click(".activity--full li:nth-child(2) button")) },
   report: { snapshot: base, after: click(".score") },
@@ -435,6 +448,10 @@ const api: Api = {
         return ok({ key: "lochview1" + PAYMENT_CODE.slice(8) + "qpzry9x8gf2tvdw0s3jn54khce6mua7lqpzry9x8gf2tvdw0s3jn" }) as UiReply<T>;
       case "source-report":
         return ok({ report: "{}", transactions: 4, undisclosed: 1 }) as UiReply<T>;
+      case "depth-proof": {
+        const code = `lochdepth1${"qpzry9x8gf2tvdw0s3jn54khce6mua7l".repeat(23)}`;
+        return ok({ code, link: `https://lochlayer.com/verify#${code}`, threshold: request.threshold, notes: 2 }) as UiReply<T>;
+      }
       case "payment-code":
         return ok(story.code ?? ({ status: "made", code: PAYMENT_CODE, made: 1 } satisfies PaymentCodeReply)) as UiReply<T>;
       default:

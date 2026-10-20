@@ -52,3 +52,5 @@ export const DEFAULTS = {
 export const CLAIM_PAGE = "https://lochlayer.com/claim";
 /** Where a receipt or a source-of-funds report can be checked by whoever is given one. */
 export const VERIFY_PAGE = "lochlayer.com/verify";
+/** A depth proof's link: the code follows the "#", which a browser never sends to the server. */
+export const DEPTH_PAGE = "https://lochlayer.com/verify";

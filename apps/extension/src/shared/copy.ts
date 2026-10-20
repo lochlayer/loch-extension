@@ -749,3 +749,50 @@ export function activityMeta(entry: ActivityEntry, now: number): string {
       return whenText(entry.at, now, true);
   }
 }
+
+// ---------------------------------------------------------------- depth proof
+
+/**
+ * A depth proof shows someone that this wallet holds at least an amount, and nothing else. The
+ * amount is public from the moment it is handed over, so it is set upright.
+ */
+export const DEPTH_COPY = {
+  title: "Prove depth",
+  lede: "Show someone that you hold at least an amount in the Loch, without showing your balance, your notes or any address. For an OTC desk, a landlord, a lender: anyone who asks for proof of funds.",
+  amountLabel: "At least",
+  challengeLabel: "Their challenge",
+  challengeHint: "The words or code the person asking gave you. The proof answers exactly this, so it cannot be passed on to someone else. Up to 128 bytes.",
+  challengeEmpty: "Enter the challenge they gave you.",
+  challengeLong: "The challenge is longer than 128 bytes.",
+  make: "Make the proof",
+  making: "Proving…",
+  copyCode: "Copy the proof",
+  copyLink: "Copy the link",
+  codeLabel: "Your depth proof",
+  /** What the proof shows and what it costs, for an amount already formatted. */
+  result: (sol: string) =>
+    `Shows you hold at least ${pub(sol)} SOL in the Loch, and nothing else. Whoever checks it can later see when these notes move, and where if you surface from them; send them to yourself first.`,
+  checkAt: "They check it at lochlayer.com/verify, or with the SDK. It stays good until a note in it is spent or the pool has moved on 64 transactions.",
+  shownTitle: "Someone you gave a depth proof can see this withdrawal",
+  shownWarning: "It spends a note you showed in a depth proof. Whoever has that proof can see the note leave, and so where you surfaced.",
+  shownAdvice: "Send the amount to yourself first: the new notes are in no proof.",
+} as const;
+
+/** Words for a depth proof that could not be made, by the error code the worker answered with. */
+export function depthErrorText(code: string): string {
+  switch (code) {
+    case "INSUFFICIENT_BALANCE":
+      return "Your shielded balance is smaller than that amount.";
+    case "CONSOLIDATION_REQUIRED":
+      return "That amount needs more than four of your notes, and one proof holds four. Combine notes with a send to yourself, then prove again.";
+    case "STALE_STATE":
+    case "SYNC_FAILED":
+      return "Loch could not bring the wallet up to date with the chain. Try again in a moment.";
+    case "PROOF_FAILED":
+      return "The proof could not be made. Try again; if it keeps failing, reload the extension.";
+    case "INVALID_ARGUMENT":
+      return "Check the amount and the challenge, then try again. Unlock the wallet first if it is locked.";
+    default:
+      return "Loch could not make the proof. Check the connection and try again.";
+  }
+}

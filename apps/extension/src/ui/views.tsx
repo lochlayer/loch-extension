@@ -6,16 +6,16 @@ import { byHourSvg, counterpartiesSvg, statementHtml, steppedBedSvg } from "@loc
 import { groupAddress } from "@loch/design/numerals";
 import { useEffect, useRef, useState } from "preact/hooks";
 
-import { exactSol, inputSol, parseAmountInput } from "../shared/amounts.js";
+import { amountProblemText, exactSol, inputSol, parseAmountInput } from "../shared/amounts.js";
 import { mainnetTestingEnabled } from "../shared/build.js";
 import { CLAIM_PAGE, VERIFY_PAGE } from "../shared/constants.js";
-import { activityObserver, activityStatusText, isPublicActivity, shortAddress, verdict, whenText } from "../shared/copy.js";
+import { DEPTH_COPY, activityObserver, activityStatusText, depthErrorText, isPublicActivity, shortAddress, verdict, whenText } from "../shared/copy.js";
 import { activityCsv } from "../shared/export.js";
-import type { ActivityEntry, ClaimCheck, ClaimCodeReply, PaymentCodeReply, ReceiptReply, Snapshot, SourceReportReply, ViewingKeyReply } from "../shared/view.js";
+import type { ActivityEntry, ClaimCheck, ClaimCodeReply, DepthProofReply, PaymentCodeReply, ReceiptReply, Snapshot, SourceReportReply, ViewingKeyReply } from "../shared/view.js";
 import type { Api } from "./api.js";
 import { ActivityRow } from "./App.js";
 import { connectPlace, useQuote } from "./flows.js";
-import { Amount, Field, Icon, ViewHead } from "./parts.js";
+import { Amount, AmountField, Field, Icon, Rich, ViewHead } from "./parts.js";
 
 type ToastFn = (text: string, kind?: "done" | "caution" | "plain") => void;
 
@@ -412,6 +412,106 @@ function ViewingKeySection({ api, toast, unlocked }: { api: Api; toast: ToastFn;
         )}
       </div>
       <p class="t-fine">They read it at {VERIFY_PAGE}, or with the SDK.</p>
+    </section>
+  );
+}
+
+/**
+ * A depth proof: at least this much, answering the challenge of whoever asked. The amount is
+ * public once the proof is handed over, so it is entered and shown upright. Nothing is kept
+ * here: the worker remembers only which notes were shown, to warn before surfacing from them.
+ */
+export function DepthProofSection({ api, toast, unlocked }: { api: Api; toast: ToastFn; unlocked: boolean }) {
+  const [amountText, setAmountText] = useState("");
+  const [challenge, setChallenge] = useState("");
+  const [touched, setTouched] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [made, setMade] = useState<DepthProofReply | null>(null);
+  const parsed = parseAmountInput(amountText);
+  const challengeBytes = new TextEncoder().encode(challenge.normalize("NFC").trim()).length;
+  const challengeError = challengeBytes === 0 ? DEPTH_COPY.challengeEmpty : challengeBytes > 128 ? DEPTH_COPY.challengeLong : null;
+  const ready = parsed.ok && challengeError === null && unlocked && !busy;
+  const make = async () => {
+    setTouched(true);
+    if (!ready || !parsed.ok) return;
+    setBusy(true);
+    setFailure(null);
+    const reply = await api.call<DepthProofReply>({ loch: "ui", type: "depth-proof", threshold: parsed.lamports.toString(), challenge });
+    setBusy(false);
+    if (reply.ok) setMade(reply.value);
+    else setFailure(depthErrorText(reply.error.code));
+  };
+  const copy = (text: string, what: string) => void api.copy(text).then((ok) => toast(ok ? `${what} copied.` : "Could not copy. Select it instead.", ok ? "done" : "caution"));
+  return (
+    <section class="settings__section" aria-labelledby="set-depth">
+      <h3 class="settings__title" id="set-depth">
+        {DEPTH_COPY.title}
+      </h3>
+      <p class="t-small">{DEPTH_COPY.lede}</p>
+      {made ? (
+        <>
+          <p class="address-full receive__address" aria-label={DEPTH_COPY.codeLabel}>
+            {groupAddress(made.code)}
+          </p>
+          <p class="t-small" role="status">
+            <Rich text={DEPTH_COPY.result(exactSol(BigInt(made.threshold)))} />
+          </p>
+          <div class="cluster">
+            <button class="btn btn--secondary btn--sm" type="button" onClick={() => copy(made.link, "Link")}>
+              <Icon name="copy" small />
+              {DEPTH_COPY.copyLink}
+            </button>
+            <button class="btn btn--secondary btn--sm" type="button" onClick={() => copy(made.code, "Proof")}>
+              <Icon name="copy" small />
+              {DEPTH_COPY.copyCode}
+            </button>
+            <button class="btn btn--quiet btn--sm" type="button" onClick={() => setMade(null)}>
+              Done
+            </button>
+          </div>
+          <p class="t-fine">{DEPTH_COPY.checkAt}</p>
+        </>
+      ) : (
+        <>
+          <AmountField
+            id="depth-amount"
+            label={DEPTH_COPY.amountLabel}
+            value={amountText}
+            shielded={false}
+            onInput={(value) => {
+              setAmountText(value);
+              setTouched(true);
+            }}
+            error={touched && !parsed.ok ? amountProblemText(parsed.problem) : null}
+            disabled={!unlocked}
+          />
+          <Field label={DEPTH_COPY.challengeLabel} id="depth-challenge" hint={DEPTH_COPY.challengeHint} error={touched ? challengeError : null}>
+            <input
+              class="input"
+              id="depth-challenge"
+              type="text"
+              spellcheck={false}
+              autocomplete="off"
+              value={challenge}
+              disabled={!unlocked}
+              aria-invalid={touched && challengeError ? "true" : undefined}
+              onInput={(event) => setChallenge(event.currentTarget.value)}
+            />
+          </Field>
+          {failure && (
+            <p class="field__error" role="alert">
+              <Icon name="caution" />
+              <span>{failure}</span>
+            </p>
+          )}
+          <div class="cluster">
+            <button class="btn btn--secondary btn--sm" type="button" aria-disabled={ready ? undefined : "true"} disabled={!unlocked} onClick={() => void make()}>
+              {busy ? DEPTH_COPY.making : DEPTH_COPY.make}
+            </button>
+          </div>
+        </>
+      )}
     </section>
   );
 }
@@ -1054,6 +1154,7 @@ export function SettingsView({ snapshot, api, onClose, toast }: ViewProps & { to
         </section>
       )}
 
+      {active && <DepthProofSection api={api} toast={toast} unlocked={active.unlocked} />}
       {active && <ViewingKeySection api={api} toast={toast} unlocked={active.unlocked} />}
 
       <section class="settings__section" aria-labelledby="set-about">

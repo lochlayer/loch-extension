@@ -12,10 +12,14 @@ export const PROVER_PORT = "loch-prover";
 
 export type ProveReply = { ok: true; proof: Groth16Proof; publicSignals: string[]; ms: number } | { ok: false; message: string };
 
+/** The circuits the prover has: the pool's transaction, and the depth proof (shown to people, never to the program). */
+export type ProverCircuit = "transaction" | "depth";
+
 /** Service worker to prover, over the port. */
 export interface ProveRequest {
   type: "prove";
   id: number;
+  circuit: ProverCircuit;
   /** The circuit input, bigints as decimal strings. SECRET: it holds the spending key. */
   input: unknown;
 }

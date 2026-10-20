@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { amountProblemText, displaySol, exactSol, inputSol, parseAmountInput } from "../shared/amounts.js";
 import { mainnetTestingEnabled } from "../shared/build.js";
 import { DEPOSIT_OVERHEAD, SYSTEM_RENT_MINIMUM } from "../shared/constants.js";
-import { ACTION_NAME, ACTION_RUNNING, OBSERVER, busyLabel, failureCopy, shortAddress, whenText } from "../shared/copy.js";
+import { ACTION_NAME, ACTION_RUNNING, DEPTH_COPY, OBSERVER, busyLabel, failureCopy, shortAddress, whenText } from "../shared/copy.js";
 import type { AddressCheck, FlowView, PublicBalanceReply, Quote, Snapshot, SurfaceWarningView } from "../shared/view.js";
 import type { Api, Draft } from "./api.js";
 import type { View } from "./App.js";
@@ -403,6 +403,7 @@ const SURFACE_WARNING: Record<SurfaceWarningView["id"], (warning: SurfaceWarning
   "same-address": (warning) => (warning.amount ? "It goes to the address you dived in from." : "It goes to an address that is connected to Loch on this device."),
   "same-amount": (warning, now) => `It is the same amount as your dive-in ${warning.at ? whenText(warning.at, now) : "recently"}.`,
   "soon-after": (warning, now) => `It comes soon after it: you dived in ${warning.at ? whenText(warning.at, now) : "a short while ago"}.`,
+  shown: () => DEPTH_COPY.shownWarning,
 };
 
 export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind: FormKind; snapshot: Snapshot; api: Api; onClose: () => void; openSettings: () => void }) {
@@ -790,14 +791,17 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
           <div class="notice notice--caution" role="status">
             <p class="notice__title">
               <Icon name="caution" />
-              This withdrawal points back at your deposit
+              {warnings.every((warning) => warning.id === "shown") ? DEPTH_COPY.shownTitle : "This withdrawal points back at your deposit"}
             </p>
             <ul class="reasons">
               {warnings.map((warning) => (
                 <li key={warning.id}>{SURFACE_WARNING[warning.id](warning, now)}</li>
               ))}
             </ul>
-            <p>You can still surface. Another amount, later, to a fresh address gives less away.</p>
+            <p>
+              {warnings.some((warning) => warning.id !== "shown") ? "You can still surface. Another amount, later, to a fresh address gives less away." : "You can still surface."}
+              {warnings.some((warning) => warning.id === "shown") ? ` ${DEPTH_COPY.shownAdvice}` : ""}
+            </p>
           </div>
         )}
 

@@ -15,7 +15,7 @@ import { chromeKV } from "./kv.js";
 import { createChain } from "./network.js";
 import { checkOhttp, rpcTransport } from "./ohttp.js";
 import { PROVER_PORT } from "../shared/proverProtocol.js";
-import { acceptProverPort, offscreenProver } from "./proverProxy.js";
+import { acceptProverPort, offscreenDepthProver, offscreenProver } from "./proverProxy.js";
 import { handleContent, handleUi } from "./router.js";
 import { resumeScan } from "./scan.js";
 
@@ -50,6 +50,7 @@ const env: Env = {
   relayer: (settings, chain) => new RelayerClient(settings.relayerUrl, { fetch: (url, init) => chain.fetch(url, init) }),
   screener: (settings, chain) => new ScreenerClient(settings.screenerUrl, { fetch: (url, init) => chain.fetch(url, init) }),
   prover: offscreenProver,
+  depthProver: offscreenDepthProver,
   tabs: {
     create: async (options) => {
       const tab = await chrome.tabs.create(options);
