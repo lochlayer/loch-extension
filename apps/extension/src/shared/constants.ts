@@ -54,3 +54,5 @@ export const CLAIM_PAGE = "https://lochlayer.com/claim";
 export const VERIFY_PAGE = "lochlayer.com/verify";
 /** A depth proof's link: the code follows the "#", which a browser never sends to the server. */
 export const DEPTH_PAGE = "https://lochlayer.com/verify";
+/** A pay link: this followed by a payment code. Anyone can pay it from a wallet that opens Blinks. */
+export const PAY_PAGE = "https://lochlayer.com/pay/";

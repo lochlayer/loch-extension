@@ -676,8 +676,8 @@ test("finding 8: the content-script world can neither read nor write the extensi
 });
 
 test("finding 2: the settings screen asks before the connect page is changed", async () => {
-  await popup.locator(".address-chip").click();
-  await popup.getByRole("button", { name: /^Settings/ }).click();
+  await popup.getByRole("button", { name: "Settings", exact: true }).click();
+  await popup.getByRole("button", { name: /^Advanced/ }).click();
   const field = popup.locator("#set-connectUrl");
   await expect(field).toHaveValue(`${altOrigin}/connect.html`);
   await field.fill("http://127.0.0.1:9/other.html");

@@ -5,8 +5,9 @@
 //     wallets                      [{ address, walletName, addedAt, salt, check }], in the clear
 //     active                       the address the interface shows
 //     vault:<address>:state        the SDK wallet state (leaves, notes), the
-//                                  spends sent but not yet seen on chain, and
-//                                  the notes shown in a depth proof            ENCRYPTED
+//                                  spends sent but not yet seen on chain, the
+//                                  notes shown in a depth proof, and which
+//                                  payment code the pay link is                ENCRYPTED
 //     vault:<address>:activity     the activity log                            ENCRYPTED
 //     vault:<address>:records      the wallet's own transactions, opened: what
 //                                  receipts, reports and claim links are made
@@ -72,6 +73,11 @@ export interface WalletRuntime {
    * once it is spent.
    */
   shown: string[];
+  /**
+   * Index of the payment code behind this wallet's pay link (lochlayer.com/pay/<code>), or null
+   * before one was made. Saved with the state. Only the index is kept: the code follows from it.
+   */
+  payLink: number | null;
 }
 
 /** How many of its own output commitments a wallet remembers. */
@@ -85,6 +91,7 @@ interface StoredState {
   pending?: unknown;
   ownOutputs?: unknown;
   shown?: unknown;
+  payLink?: unknown;
 }
 
 const CHECK_VALUE = "loch";
@@ -179,6 +186,7 @@ export class Store {
       ownOutputs: [],
       records: [],
       shown: [],
+      payLink: null,
     };
     this.runtimes.set(address, runtime);
     await this.saveState(runtime);
@@ -226,6 +234,7 @@ export class Store {
     let pending: PendingSpend[] = [];
     let ownOutputs: string[] = [];
     let shown: string[] = [];
+    let payLink: number | null = null;
     const storedState = await this.local.get<unknown>(`vault:${address}:state`);
     if (storedState !== undefined) {
       // A state that does not open or does not parse is not kept: a full sync restores it.
@@ -243,6 +252,7 @@ export class Store {
         }
         if (Array.isArray(opened.ownOutputs)) ownOutputs = opened.ownOutputs.filter((item): item is string => typeof item === "string");
         if (Array.isArray(opened.shown)) shown = opened.shown.filter((item): item is string => typeof item === "string");
+        if (Number.isSafeInteger(opened.payLink) && (opened.payLink as number) >= 0) payLink = opened.payLink as number;
       } catch (error) {
         if (error instanceof VaultError && error.reason === "wrong-key") throw error;
         state = createWalletState(keys);
@@ -266,6 +276,7 @@ export class Store {
       ownOutputs,
       records,
       shown,
+      payLink,
     };
     // Forgotten while this was being read: there is no such wallet any more.
     if (this.forgotten.has(address)) return null;
@@ -307,7 +318,7 @@ export class Store {
     // A shown note that has been spent has nothing left to give away.
     const unspent = new Set(runtime.state.notes.filter((note) => !note.spent).map((note) => note.commitment));
     runtime.shown = runtime.shown.filter((commitment) => unspent.has(commitment));
-    const stored: StoredState = { state: runtime.state, neverSynced: runtime.neverSynced, pending: runtime.pending, ownOutputs: runtime.ownOutputs, shown: runtime.shown };
+    const stored: StoredState = { state: runtime.state, neverSynced: runtime.neverSynced, pending: runtime.pending, ownOutputs: runtime.ownOutputs, shown: runtime.shown, payLink: runtime.payLink };
     return this.write(runtime, "state", stored);
   }
 

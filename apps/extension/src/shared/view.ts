@@ -171,6 +171,8 @@ export interface ActivityEntry {
   count?: number;
   /** send: the payment was made to a claim link. */
   claim?: true;
+  /** receive: it was paid to this wallet's pay link. */
+  via?: "pay-link";
   /**
    * Only in a snapshot, never stored: this device holds the record of the transaction, so a
    * receipt (send), a source-of-funds report (surface) or the claim code (a send to a claim
@@ -321,6 +323,11 @@ export type UiRequest =
   | { loch: "ui"; type: "check-address"; kind: "shielded" | "public"; text: string }
   /** Makes the active wallet's next payment code. */
   | { loch: "ui"; type: "payment-code" }
+  /**
+   * The active wallet's pay link. `show`: the one it has, or null. `make`: the one it has, or a
+   * first one. `new`: a link on a fresh payment code; the old link keeps working.
+   */
+  | { loch: "ui"; type: "pay-link"; action: "show" | "make" | "new" }
   /** `fee`: the relayer fee the user now agrees to, when the failure was that the fee changed. */
   | { loch: "ui"; type: "flow-retry"; fee?: string }
   | { loch: "ui"; type: "flow-cancel" }
@@ -349,6 +356,17 @@ export interface PaymentCodeReply {
   code: string;
   /** How many codes this wallet has made on this device, this one included. */
   made: number;
+}
+
+/**
+ * The answer to "pay-link" (null for "show" before there is one). `code` is a payment code;
+ * `link` is the page anyone can pay it from. `limit`: twenty codes in a row are unpaid, so no
+ * fresh one was made and the link is the one the wallet had (or the newest code).
+ */
+export interface PayLinkReply {
+  status: "kept" | "made" | "limit";
+  code: string;
+  link: string;
 }
 
 /** The answer to "claim-check". `own`: this device made the link, so collecting it takes the payment back. */

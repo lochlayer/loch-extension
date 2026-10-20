@@ -17,6 +17,7 @@ import type {
   ClaimCheck,
   ClaimCodeReply,
   DepthProofReply,
+  PayLinkReply,
   PaymentCodeReply,
   PublicBalanceReply,
   Quote,
@@ -34,7 +35,7 @@ import type { Core } from "./core.js";
 import { claimCodeFor, depthProofFor, receiptFor, sourceReportFor, viewingKeyFor } from "./disclose.js";
 import { cancelFlow, chooseWallet, dismissFlow, flowBridgeAnswer, retryFlow, startDive, startSpend, startUnlock } from "./flows.js";
 import { assertAllowedCluster, describeNetworkError, readCluster } from "./network.js";
-import { makePaymentCode, payeeOf } from "./paymentCode.js";
+import { makePaymentCode, payLinkFor, payeeOf } from "./paymentCode.js";
 import { readPublicBalance } from "./publicBalance.js";
 import { reviewTransactions } from "./review.js";
 import { cancelScan, startScan } from "./scan.js";
@@ -72,6 +73,7 @@ const UI_TYPES = [
   "surface-warnings",
   "check-address",
   "payment-code",
+  "pay-link",
   "flow-retry",
   "flow-cancel",
   "flow-dismiss",
@@ -123,6 +125,8 @@ export function parseUiRequest(value: unknown): UiRequest | null {
     case "check-address":
       if ((value.kind !== "shielded" && value.kind !== "public") || !isString(value.text, 400)) return null;
       return { loch: "ui", type: "check-address", kind: value.kind, text: value.text };
+    case "pay-link":
+      return value.action === "show" || value.action === "make" || value.action === "new" ? { loch: "ui", type: "pay-link", action: value.action } : null;
     case "settings":
       return isRecord(value.patch) ? { loch: "ui", type: "settings", patch: value.patch } : null;
     case "flow-retry":
@@ -231,6 +235,11 @@ export async function handleUi(core: Core, message: unknown): Promise<UiReply> {
         const reply = await makePaymentCode(core);
         core.changed();
         return ok<PaymentCodeReply>(reply);
+      }
+      case "pay-link": {
+        const reply = await payLinkFor(core, request.action);
+        if (request.action !== "show") core.changed();
+        return ok<PayLinkReply | null>(reply);
       }
       case "surface-warnings":
         return ok<SurfaceWarningView[]>(await warningsForSurface(core, request.to, fromLamportString(request.amount), fromLamportString(request.fee)));
@@ -379,7 +388,10 @@ async function changeSettings(core: Core, patch: Record<string, unknown>): Promi
       next.connectUrl = check.url;
     }
   }
-  if (patch.theme === "dusk" || patch.theme === "night") next.theme = patch.theme;
+  if (patch.theme === "dusk" || patch.theme === "night") {
+    next.theme = patch.theme;
+    next.themeChosen = true;
+  }
   if (typeof patch.wrapperEnabled === "boolean") next.wrapperEnabled = patch.wrapperEnabled;
   if (typeof patch.warnFirstRecipients === "boolean") next.warnFirstRecipients = patch.warnFirstRecipients;
   if (patch.maxFeeLamports !== undefined) {

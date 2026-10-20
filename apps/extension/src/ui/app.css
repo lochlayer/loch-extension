@@ -363,3 +363,233 @@ html[data-view="wide"] body {
     border-top: var(--hair) solid var(--rule);
   }
 }
+
+/* ------------------------------------------------------- 0.1.4: less on each screen
+   One hero (the shielded balance), one quiet line of what is public, more water between things,
+   fewer rules. The package's popup markup is kept; only its arrangement is changed here. */
+
+/* Land: the brand, the wallet and settings, then one quiet line. */
+html[data-view="popup"] .popup__land {
+  min-height: 0;
+}
+.popup__head-end {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+  min-width: 0;
+}
+.popup__gear {
+  color: var(--land-ink-2, var(--text-2));
+}
+.popup__public {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 var(--gutter) var(--space-3);
+}
+.popup__public > :last-child {
+  padding-left: 0;
+  border-left: 0;
+}
+.balance--public {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.balance--public .balance__figure {
+  flex-wrap: nowrap;
+  gap: 0 0.375rem;
+}
+.balance--public .figure,
+.popup__public .score .figure {
+  font-size: var(--size-5);
+  line-height: 1;
+}
+.popup__public .score--inline {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.popup__public .score__of {
+  margin-left: -0.25rem;
+}
+.popup__public .score__link {
+  margin-left: 0;
+}
+
+/* Water: the balance with room around it, and the four actions. */
+.popup__water--home {
+  gap: var(--space-6);
+  padding: var(--space-6) var(--gutter) var(--space-5);
+}
+.popup__water--home .balance {
+  gap: var(--space-1);
+}
+.popup__actions--four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.popup__actions--four .btn--stacked {
+  min-height: 3.5rem;
+}
+.home__fine {
+  color: var(--text-2);
+}
+
+/* Deep: a short list, no closing legend. */
+.popup__deep--home {
+  border-top: 0;
+}
+.popup__deep--home .popup__deep-head {
+  padding-top: var(--space-4);
+}
+.popup__deep--home .activity > li:last-child {
+  border-bottom: 0;
+}
+
+/* The welcome: two lines and one button. */
+.welcome {
+  gap: var(--space-5);
+}
+.welcome > .welcome__action {
+  margin-top: auto;
+}
+
+/* Receive: the pay link first, the rest folded away. */
+.receive {
+  gap: var(--space-5);
+}
+.paylink {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  width: 100%;
+}
+.paylink__title {
+  font-size: var(--text-body);
+  font-weight: var(--weight-strong);
+}
+.paylink__link {
+  width: 100%;
+  padding: var(--space-3) 0;
+  border-top: var(--hair) solid var(--rule);
+  border-bottom: var(--hair) solid var(--rule);
+  color: var(--public);
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}
+.paylink > .disclosure,
+.settings__page > .disclosure {
+  width: 100%;
+  margin-top: var(--space-2);
+}
+.receive__more {
+  width: 100%;
+}
+.receive__block {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  width: 100%;
+}
+.receive__block > .field,
+.receive__block > .deflist {
+  width: 100%;
+}
+.receive__block .receive__address {
+  border-top: 0;
+  padding-top: 0;
+}
+.receive__code {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* Settings: a list, and a page for each thing that needs more than one line. */
+.settings__list {
+  margin-top: 0;
+}
+.settings__static {
+  cursor: default;
+}
+.settings__static:hover {
+  background: transparent;
+}
+.settings__list .picklist__row > .icon:last-child {
+  color: var(--text-2);
+  transform: rotate(-90deg);
+}
+.settings__page {
+  display: grid;
+  gap: var(--space-4);
+  justify-items: start;
+}
+.settings__page > .field,
+.settings__page > .notice,
+.settings__page > .choice,
+.settings__page > .receive__address {
+  width: 100%;
+}
+.settings__disclosure {
+  margin-top: var(--space-5);
+}
+.settings__disclosure + .settings__section {
+  border-top: 0;
+}
+.settings__disclosure .disclosure__body > .stack,
+.settings__disclosure .disclosure__body > .deflist {
+  width: 100%;
+}
+
+/* The sheets: a quiet switch under a field, and the explanation folded at the foot. */
+.form__switch {
+  justify-self: start;
+  margin-top: var(--space-2);
+}
+.field > .form__switch {
+  align-self: flex-start;
+}
+.sheet .how {
+  margin-top: var(--space-2);
+}
+.how .observer {
+  font-size: var(--text-small);
+}
+
+/* "How it works" is quieter than a row: no rules, the secondary ink, one size down. */
+.disclosure.how {
+  border: 0;
+}
+.disclosure.how > summary {
+  min-height: var(--control-sm);
+  font-size: var(--text-fine);
+  font-weight: var(--weight-medium);
+  color: var(--text-2);
+}
+.disclosure.how > summary:hover {
+  background: transparent;
+  color: var(--text);
+}
+.disclosure.how > .disclosure__body {
+  padding-top: 0;
+}
+.settings__list .picklist__row {
+  padding-left: 0;
+}
+/* The welcome keeps its land tall: the two lines of the headline straddle the waterline. */
+html[data-view="popup"] .popup__land.welcome__land-wrap {
+  min-height: calc(var(--popup-land) - var(--line));
+}
+
+/* The ring mark has a night drawing whose water does not sink into the dark: one image per palette. */
+.mark--night,
+[data-theme="night"] .mark--dusk {
+  display: none;
+}
+[data-theme="night"] .mark--night {
+  display: inline-block;
+}

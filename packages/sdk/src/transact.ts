@@ -385,6 +385,61 @@ export async function prepareDeposit(params: PrepareDepositParams): Promise<Prep
   });
 }
 
+/** Parameters of {@link preparePaymentDeposit}. */
+export interface PreparePaymentDepositParams {
+  prover: Prover;
+  /** Who is paid: a payment code (the note is keyed under its secret) or a plain address. */
+  to: ShieldedAddress | PaymentCode;
+  /** Lamports to move from the payer's wallet into the pool, all of it to `to`. */
+  amount: bigint;
+  /** The payer's wallet: signs and pays the deposit, nullifier rent and transaction fee. It needs no Loch keys. */
+  depositor: PublicKey;
+  /** Any root the program still accepts (`(await fetchTreeAccount(connection)).root`). */
+  root: bigint;
+  /** The pool configuration (`fetchPoolConfig`). */
+  config: Pick<PoolConfig, "screener" | "maxDeposit" | "paused">;
+  /** Defaults to {@link PROGRAM_ID}. */
+  programId?: PublicKey;
+}
+
+/**
+ * Prepares a deposit whose note belongs to someone else: a payment into the
+ * pool from a public wallet that has no Loch keys (a Blink, a pay link).
+ * Exactly a deposit to the chain and to the screening service: `ext_amount =
+ * +amount`, recipient, relayer and signer are the payer, the screening
+ * authority co-signs. The note of `amount` lamports goes to `to`, a keyed note
+ * when `to` is a payment code; the zero-amount padding output is encrypted to
+ * `to`'s address as well, so the payer keeps nothing.
+ *
+ * Public: the payer's wallet, the amount, the time. Not public: who was paid.
+ * Whoever builds the transaction (the payer, or a service doing it for them)
+ * knows both. docs/protocol.md section 4, "Paying into the pool for someone".
+ *
+ * @throws LochError `DEPOSITS_PAUSED`, `DEPOSIT_TOO_LARGE`, `INVALID_ARGUMENT`.
+ */
+export async function preparePaymentDeposit(params: PreparePaymentDepositParams): Promise<PreparedTransact> {
+  const { to, config, depositor } = params;
+  const amount = assertAmount(params.amount);
+  if (amount === 0n || amount > I64_MAX) throw new LochError("INVALID_ARGUMENT", "a deposit amount must be between 1 and 2^63 - 1 lamports");
+  if (config.paused) throw new LochError("DEPOSITS_PAUSED", "deposits are paused; withdrawals and transfers still work");
+  if (amount > config.maxDeposit) throw new LochError("DEPOSIT_TOO_LARGE", "the deposit exceeds the pool's per-transaction cap");
+  const padding: ShieldedAddress = { publicKey: to.publicKey, encryptionPublic: to.encryptionPublic };
+  return prepareTransact({
+    prover: params.prover,
+    root: params.root,
+    inputs: [],
+    outputs: [{ amount, to }],
+    padding,
+    extAmount: amount,
+    fee: 0n,
+    recipient: depositor,
+    relayer: depositor,
+    signer: depositor,
+    screener: config.screener,
+    programId: params.programId,
+  });
+}
+
 /** What every spending transaction needs. */
 export interface SpendContext {
   prover: Prover;

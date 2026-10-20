@@ -8,11 +8,11 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { amountProblemText, displaySol, exactSol, inputSol, parseAmountInput } from "../shared/amounts.js";
 import { mainnetTestingEnabled } from "../shared/build.js";
 import { DEPOSIT_OVERHEAD, SYSTEM_RENT_MINIMUM } from "../shared/constants.js";
-import { ACTION_NAME, ACTION_RUNNING, DEPTH_COPY, OBSERVER, busyLabel, failureCopy, shortAddress, whenText } from "../shared/copy.js";
+import { ACTION_NAME, ACTION_RUNNING, DEPTH_COPY, DOCS_ANCHOR, FORM_COPY, OBSERVER, SETTINGS_COPY, busyLabel, failureCopy, shortAddress, whenText } from "../shared/copy.js";
 import type { AddressCheck, FlowView, PublicBalanceReply, Quote, Snapshot, SurfaceWarningView } from "../shared/view.js";
 import type { Api, Draft } from "./api.js";
 import type { View } from "./App.js";
-import { Amount, AmountField, FailureBlock, Field, Icon, Observer, Progress, Sheet } from "./parts.js";
+import { Amount, AmountField, FailureBlock, Field, HowItWorks, Icon, Observer, Progress, Rich, Sheet } from "./parts.js";
 import { pub, shd } from "../shared/copy.js";
 
 export type FormKind = "dive" | "send" | "surface";
@@ -369,11 +369,10 @@ function useAddressCheck(api: Api, kind: "shielded" | "public", text: string): A
   return check;
 }
 
-/** What the send form says under a recipient it accepts. */
-function recipientHint(address: Extract<AddressCheck, { ok: true }>): string {
-  if (address.own) return address.code ? "This is one of your own payment codes." : "This is your own shielded address.";
-  if (address.code) return "A payment code. What you send stays unreadable to others even if today’s encryption is broken later.";
-  return "A shielded address. If the recipient gives you a payment code instead, the payment also stays private from a future quantum computer.";
+/** What the send form says under a recipient it accepts: only that it is the wallet's own. */
+function recipientHint(address: Extract<AddressCheck, { ok: true }>): string | undefined {
+  if (address.own) return address.code ? FORM_COPY.ownCode : FORM_COPY.ownAddress;
+  return undefined;
 }
 
 const max = (a: bigint, b: bigint) => (a > b ? a : b);
@@ -628,30 +627,16 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
           else void submit();
         }}
       >
-        {kind === "send" && (
-          <label class="choice">
-            <input class="toggle" type="checkbox" role="switch" checked={asLink} onChange={(event) => setAsLink(event.currentTarget.checked)} />
-            <span>
-              Pay with a claim link
-              <small>For someone who has no Loch yet, and so no shielded address to give you.</small>
-            </span>
-          </label>
-        )}
         {linked && (
-          <p class="notice notice--inline">
-            <Icon name="info" />
-            <span>
-              Loch pays the amount to a link you send them yourself. Whoever opens the link first collects it, into their own Loch or to any Solana address, so send it privately. Until then you can take it back.
-            </span>
-          </p>
+          <div class="field">
+            <p class="t-small">{FORM_COPY.linkLine}</p>
+            <button class="link link--quiet form__switch" type="button" onClick={() => setAsLink(false)}>
+              {FORM_COPY.asAddress}
+            </button>
+          </div>
         )}
         {kind !== "dive" && !linked && (
-          <Field
-            label={kind === "send" ? "To a shielded address or a payment code" : "To a public Solana address"}
-            id={`${kind}-to`}
-            error={addressError}
-            hint={kind === "send" && address?.ok ? recipientHint(address) : undefined}
-          >
+          <Field label={kind === "send" ? FORM_COPY.toSend : FORM_COPY.toSurface} id={`${kind}-to`} error={addressError} hint={kind === "send" && address?.ok ? recipientHint(address) : undefined}>
             <div class="input-group input-group--address">
               <textarea
                 class="input"
@@ -660,7 +645,7 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
                 spellcheck={false}
                 autocomplete="off"
                 autocapitalize="off"
-                placeholder={kind === "send" ? "loch1…" : "Paste an address"}
+                placeholder={kind === "send" ? FORM_COPY.toSendPlaceholder : FORM_COPY.toSurfacePlaceholder}
                 value={to}
                 aria-invalid={addressError ? "true" : undefined}
                 aria-describedby={addressError ? `${kind}-to-error` : undefined}
@@ -673,12 +658,17 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
                 </span>
               )}
             </div>
+            {kind === "send" && (
+              <button class="link link--quiet form__switch" type="button" onClick={() => setAsLink(true)}>
+                {FORM_COPY.asLink}
+              </button>
+            )}
           </Field>
         )}
 
         <AmountField
           id={`${kind}-amount`}
-          label={kind === "dive" ? "Amount to dive in with" : kind === "send" ? "Amount to send privately" : "Amount to surface"}
+          label={FORM_COPY.amount}
           value={amountText}
           shielded={kind === "send"}
           onInput={(value) => {
@@ -689,31 +679,16 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
           error={formatError ?? amountError}
           hint={
             kind === "dive" ? (
-              <>
-                {publicBalance !== null ? (
-                  <>
-                    Public balance <Amount lamports={publicBalance} /> SOL.
-                  </>
-                ) : (
-                  "Reading your public balance."
-                )}{" "}
-                {amountError ? null : quote?.pool ? (
-                  <>
-                    The pool takes at most <Amount lamports={BigInt(quote.pool.maxDeposit)} exact /> SOL in one deposit.
-                  </>
-                ) : quote === null ? (
-                  "Reading the pool’s limits."
-                ) : null}
-              </>
+              publicBalance !== null ? (
+                <>
+                  Public balance <Amount lamports={publicBalance} /> SOL.
+                </>
+              ) : (
+                "Reading your public balance."
+              )
             ) : (
               <>
                 Shielded balance <Amount lamports={BigInt(shielded?.balance ?? "0")} shielded /> SOL.
-                {kind === "surface" && !amountError && (
-                  <>
-                    {" "}
-                    Surface at least <Amount lamports={max(SYSTEM_RENT_MINIMUM, BigInt(quote?.relayer?.minWithdrawal ?? "0"))} exact /> SOL.
-                  </>
-                )}
               </>
             )
           }
@@ -723,37 +698,31 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
           {kind === "dive" ? (
             <>
               <div class="deflist__row">
-                <dt>From</dt>
-                <dd>
-                  <span class="fig is-public">{shortAddress(snapshot.active ?? "")}</span>
-                </dd>
-              </div>
-              <div class="deflist__row">
-                <dt>Network fee and rent</dt>
+                <dt>{FORM_COPY.networkFee}</dt>
                 <dd>
                   <Amount lamports={DEPOSIT_OVERHEAD} exact /> SOL
                 </dd>
               </div>
               <div class="deflist__row">
-                <dt>Leaves your wallet</dt>
-                <dd>{amount !== null ? <Amount lamports={amount + DEPOSIT_OVERHEAD} exact /> : <span class="t-quiet">Enter an amount</span>}{amount !== null && " SOL"}</dd>
+                <dt>{FORM_COPY.total}</dt>
+                <dd>{amount !== null ? <Amount lamports={amount + DEPOSIT_OVERHEAD} exact /> : <span class="t-quiet">{FORM_COPY.enterAmount}</span>}{amount !== null && " SOL"}</dd>
               </div>
             </>
           ) : (
             <>
               <div class="deflist__row">
-                <dt>Relayer fee</dt>
+                <dt>{FORM_COPY.fee}</dt>
                 <dd>{fee !== null ? <Amount lamports={fee} exact /> : <span class="t-quiet">{quote === null ? "Asking the relayer" : "Not known"}</span>}{fee !== null && " SOL"}</dd>
               </div>
               {linked && (
                 <div class="deflist__row">
-                  <dt>Fee for collecting, paid ahead</dt>
+                  <dt>{FORM_COPY.collectFee}</dt>
                   <dd>{fee !== null ? <Amount lamports={fee} exact /> : <span class="t-quiet">Not known</span>}{fee !== null && " SOL"}</dd>
                 </div>
               )}
               <div class="deflist__row">
-                <dt>Leaves your shielded balance</dt>
-                <dd>{total !== null ? <Amount lamports={total} shielded exact /> : <span class="t-quiet">Enter an amount</span>}{total !== null && " SOL"}</dd>
+                <dt>{FORM_COPY.total}</dt>
+                <dd>{total !== null ? <Amount lamports={total} shielded exact /> : <span class="t-quiet">{FORM_COPY.enterAmount}</span>}{total !== null && " SOL"}</dd>
               </div>
             </>
           )}
@@ -763,14 +732,8 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
 
         {needsConsolidation && fee !== null && (
           <div class="notice" role="status">
-            <p class="notice__title">Combine notes first</p>
-            <p>
-              Your balance is in {shielded?.notes ?? "several"} notes, and one transaction can spend two. The two largest hold <Amount lamports={largestPair} shielded /> SOL; this needs{" "}
-              {total !== null ? <Amount lamports={total} shielded exact /> : "more"}.
-            </p>
-            <p>
-              Combining merges them into one, for one relayer fee (<Amount lamports={fee} exact /> SOL). Then send.
-            </p>
+            <p class="notice__title">{FORM_COPY.combineTitle}</p>
+            <p>{FORM_COPY.combineLine}</p>
           </div>
         )}
 
@@ -791,7 +754,7 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
           <div class="notice notice--caution" role="status">
             <p class="notice__title">
               <Icon name="caution" />
-              {warnings.every((warning) => warning.id === "shown") ? DEPTH_COPY.shownTitle : "This withdrawal points back at your deposit"}
+              {warnings.every((warning) => warning.id === "shown") ? DEPTH_COPY.shownTitle : FORM_COPY.warningTitle}
             </p>
             <ul class="reasons">
               {warnings.map((warning) => (
@@ -799,20 +762,10 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
               ))}
             </ul>
             <p>
-              {warnings.some((warning) => warning.id !== "shown") ? "You can still surface. Another amount, later, to a fresh address gives less away." : "You can still surface."}
+              {warnings.some((warning) => warning.id !== "shown") ? FORM_COPY.warningAdvice : ""}
               {warnings.some((warning) => warning.id === "shown") ? ` ${DEPTH_COPY.shownAdvice}` : ""}
             </p>
           </div>
-        )}
-
-        {kind === "dive" && !blocked && (
-          <p class="notice notice--inline">
-            <Icon name="info" />
-            <span>
-              A screening service co-signs each deposit and may decline it. It sees your address and the amount.
-              {quote?.screener?.policy ? ` Its policy: ${quote.screener.policy}` : ""}
-            </span>
-          </p>
         )}
 
         {submitError && (
@@ -822,7 +775,23 @@ export function FormSheet({ kind, snapshot, api, onClose, openSettings }: { kind
           </p>
         )}
 
-        {!(kind === "surface" && warnings.length > 0) && !blocked && <Observer>{OBSERVER[needsConsolidation ? "consolidate" : kind]}</Observer>}
+        {!blocked && (
+          <HowItWorks anchor={DOCS_ANCHOR[kind === "send" && address?.ok && address.code ? "paymentCode" : kind]}>
+            <Observer>{OBSERVER[needsConsolidation ? "consolidate" : kind]}</Observer>
+            {kind === "dive" && <p>{FORM_COPY.screening(quote?.screener?.policy)}</p>}
+            {kind === "dive" && quote?.pool && (
+              <p>
+                <Rich text={FORM_COPY.poolMax(exactSol(BigInt(quote.pool.maxDeposit)))} />
+              </p>
+            )}
+            {kind === "surface" && (
+              <p>
+                <Rich text={FORM_COPY.surfaceMin(exactSol(max(SYSTEM_RENT_MINIMUM, BigInt(quote?.relayer?.minWithdrawal ?? "0"))))} />
+              </p>
+            )}
+            {kind === "send" && address?.ok && address.code && <p>{FORM_COPY.code}</p>}
+          </HowItWorks>
+        )}
       </form>
     </Sheet>
   );
@@ -889,7 +858,7 @@ export function WalletsSheet({ snapshot, api, onClose, go }: { snapshot: Snapsho
           <button class="picklist__row" type="button" onClick={() => go("settings")}>
             <Icon name="settings" />
             <span class="picklist__name">Settings</span>
-            <span class="picklist__go">Endpoints, palette, this device</span>
+            <span class="picklist__go">{SETTINGS_COPY.settingsNote}</span>
           </button>
         </li>
         {api.popup && (

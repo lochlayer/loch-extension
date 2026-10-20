@@ -82,7 +82,8 @@ test("home after sync: the public balance is read live, shielded balance as a so
   await expect(popup.getByText("Nothing in the Loch yet.")).toBeVisible();
   await expect(popup.getByText("No activity yet")).toBeVisible();
   await expect(action(popup, "Send privately")).toBeDisabled();
-  await expect(popup.locator(".legend")).toContainText("Italic is shielded.");
+  // Since 0.1.4 the home view has no legend; the full activity list keeps one.
+  await expect(popup.locator(".legend")).toHaveCount(0);
   // The popup is exactly 380 x 600 and nothing overflows it.
   expect(await popup.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight])).toEqual([380, 600]);
   // The body is set in the design system's sans at the popup's size. (Chrome gives extension
@@ -104,8 +105,8 @@ test("keyboard: every control is reachable, shows the focus ring, and Escape clo
     await popup.keyboard.press("Tab");
     seen.push(await focused());
   }
-  // The wallet chip, the public balance's own control, the leak report, sync, receive, the one enabled action: in reading order.
-  expect(seen.join(" | ")).toMatch(/Test Wallet.*at \d\d:\d\d.*Scan this wallet.*Synced.*Receive.*Dive in/s);
+  // The wallet chip, settings, the public balance's own control, the leak report, sync, the first action: in reading order.
+  expect(seen.join(" | ")).toMatch(/Test Wallet.*at \d\d:\d\d.*Scan.*Synced.*Dive in/s);
   while ((await focused()) !== "Dive in") await popup.keyboard.press("Tab");
   // The focus ring: 2px, drawn outside the control.
   const ring = await popup.evaluate(() => {
@@ -153,7 +154,7 @@ test("send privately: a real proof made inside the extension, relayed, confirmed
   await expect(popup.locator("#send-to-error")).toContainText("This is not a shielded address");
   await popup.locator("#send-to").fill(world.friend);
   await popup.locator("#send-amount").fill("0.5");
-  await expect(sheet(popup)).toContainText("Relayer fee");
+  await expect(sheet(popup)).toContainText("Fee");
   await expect(sheet(popup)).toContainText("0.0025");
   await expect(submit(popup)).not.toHaveAttribute("aria-disabled", "true");
   await shot(popup, "07-send-form");
@@ -221,7 +222,7 @@ test("surface: warnings that it points back at the deposit, then the withdrawal"
   await expect(popup.locator("#surface-amount-error")).toContainText("Surface at least");
   await popup.locator("#surface-amount").fill("0.3");
   // The dive-in was minutes ago: surfacing now points back at it.
-  await expect(sheet(popup)).toContainText("This withdrawal points back at your deposit");
+  await expect(sheet(popup)).toContainText("This points back at your deposit");
   await expect(sheet(popup)).toContainText("It comes soon after it");
   await expect(submit(popup)).toHaveText("Surface anyway");
   await shot(popup, "10-surface-form");
@@ -395,8 +396,7 @@ test("the expanded view: the same app in a tab, both columns under one waterline
 });
 
 test("the night palette, from settings", async () => {
-  await popup.locator(".address-chip").click();
-  await popup.getByRole("button", { name: /^Settings/ }).click();
+  await popup.getByRole("button", { name: "Settings", exact: true }).click();
   await popup.getByRole("radio", { name: "Night" }).click();
   await expect(popup.locator("html")).toHaveAttribute("data-theme", "night");
   await popup.getByRole("link", { name: "Close" }).click();
@@ -438,8 +438,8 @@ test("a new browser session: locked, then unlocked with the one signature, the e
 
 test("forget this wallet on this device: everything about it is wiped", async () => {
   const address = world.wallet.publicKey.toBase58();
-  await popup.locator(".address-chip").click();
-  await popup.getByRole("button", { name: /^Settings/ }).click();
+  await popup.getByRole("button", { name: "Settings", exact: true }).click();
+  await popup.getByRole("button", { name: /^Advanced/ }).click();
   await popup.getByRole("button", { name: "Forget this wallet on this device" }).click();
   await expect(popup.getByText(/Forget .* on this device\?/)).toBeVisible();
   await popup.getByRole("button", { name: "Forget this wallet", exact: true }).click();

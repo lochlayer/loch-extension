@@ -150,7 +150,7 @@ async function runSync(core: Core, address: string, signal: AbortSignal): Promis
   runtime.pending = reconciled.remaining;
 
   // What the sync found that this device did not create.
-  for (const entry of entriesForReceived({ received: result.received, ownOutputs: new Set(runtime.ownOutputs), firstSync: runtime.neverSynced, now })) {
+  for (const entry of entriesForReceived({ received: result.received, ownOutputs: new Set(runtime.ownOutputs), firstSync: runtime.neverSynced, now, payLink: runtime.payLink })) {
     activity = addActivity(activity, entry);
   }
   const activityChanged = activity !== runtime.activity;

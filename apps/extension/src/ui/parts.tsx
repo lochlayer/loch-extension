@@ -5,7 +5,7 @@ import { formatSol } from "@loch/design/numerals";
 import type { ComponentChildren, JSX } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 
-import { elapsedText, failureCopy, type FailureContext, richParts, stageLine, statusSentence } from "../shared/copy.js";
+import { DOCS_PAGE, elapsedText, failureCopy, type FailureContext, HOW_IT_WORKS, MORE_IN_DOCS, richParts, stageLine, statusSentence } from "../shared/copy.js";
 import type { Failure, FlowView } from "../shared/view.js";
 
 export type IconName =
@@ -99,6 +99,31 @@ export function Rich({ text }: { text: string }) {
     <>
       {richParts(text).map((part) => (part.role === "plain" ? part.text : <span class={`fig ${part.role === "shielded" ? "is-shielded" : "is-public"}`}>{part.text}</span>))}
     </>
+  );
+}
+
+/**
+ * What most people can leave closed: the explanation of a screen, a native details element
+ * (opens without script), with a link to its section of the docs page.
+ */
+export function HowItWorks({ children, anchor, title }: { children?: ComponentChildren; anchor?: string; title?: string }) {
+  return (
+    <details class="disclosure how">
+      <summary>
+        <Icon name="chevron" small />
+        <span>{title ?? HOW_IT_WORKS}</span>
+      </summary>
+      <div class="disclosure__body">
+        {children}
+        {anchor && (
+          <p>
+            <a href={`${DOCS_PAGE}#${anchor}`} target="_blank" rel="noreferrer">
+              {MORE_IN_DOCS}
+            </a>
+          </p>
+        )}
+      </div>
+    </details>
   );
 }
 
@@ -340,7 +365,7 @@ export function AmountField({
 }
 
 /** A heading row under the waterline: what this view is, and the way back. */
-export function ViewHead({ title, onClose, children }: { title: ComponentChildren; onClose?: () => void; children?: ComponentChildren }) {
+export function ViewHead({ title, onClose, closeLabel, children }: { title: ComponentChildren; onClose?: () => void; closeLabel?: string; children?: ComponentChildren }) {
   return (
     <div class="popup__deep-head view-head">
       <h2>{title}</h2>
@@ -353,7 +378,7 @@ export function ViewHead({ title, onClose, children }: { title: ComponentChildre
             onClose();
           }}
         >
-          Close
+          {closeLabel ?? "Close"}
         </a>
       )}
     </div>

@@ -12,8 +12,9 @@ import { render } from "preact";
 
 import type { Flow as ScanFlow, LeakReport } from "@loch/scanner-core";
 
-import type { ActivityEntry, AddressCheck, Failure, FlowView, PaymentCodeReply, PublicBalanceReply, Quote, ScanView, Snapshot, SurfaceWarningView, UiReply, UiRequest } from "../shared/view.js";
+import type { ActivityEntry, AddressCheck, Failure, FlowView, PayLinkReply, PaymentCodeReply, PublicBalanceReply, Quote, ScanView, Snapshot, SurfaceWarningView, UiReply, UiRequest } from "../shared/view.js";
 import { mainnetTestingEnabled } from "../shared/build.js";
+import { PAY_PAGE } from "../shared/constants.js";
 import type { Api, Draft } from "./api.js";
 import { App } from "./App.js";
 
@@ -100,7 +101,7 @@ const base: Snapshot = {
     screenerUrl: MAINNET ? "https://screener-mainnet.lochlayer.com" : "https://screener.devnet.loch.example",
     connectUrl: MAINNET ? "https://connect.lochlayer.com/connect.html" : "https://connect.loch.example/",
     connectFixed: MAINNET,
-    theme: "dusk",
+    theme: "night",
     wrapperEnabled: true,
     warnFirstRecipients: false,
     maxFeeLamports: "5000000",
@@ -154,6 +155,8 @@ interface Story {
   balance?: PublicBalanceReply;
   address?: AddressCheck;
   code?: PaymentCodeReply;
+  /** The pay link the wallet already has, if any. */
+  payLink?: PayLinkReply;
   warnings?: SurfaceWarningView[];
   /** Runs after the first paint: opens a view, clicks a row, scrolls. */
   after?: (root: ParentNode) => void;
@@ -183,7 +186,18 @@ const type = (selector: string, value: string) => (root: ParentNode) => {
 const reveal = (selector: string, block: ScrollLogicalPosition = "center") => (root: ParentNode) => {
   setTimeout(() => root.querySelector(selector)?.scrollIntoView({ block }), 80);
 };
-const SETTINGS = [click(".address-chip"), click(".picklist__row", "SettingsEndpoints, palette, this device")] as const;
+const SETTINGS = [click(".popup__gear")] as const;
+/** A row of a pick list, by its name. */
+const row = (name: string) => (root: ParentNode) => {
+  const found = Array.from(root.querySelectorAll<HTMLElement>(".picklist__name")).find((node) => node.textContent?.trim() === name);
+  found?.closest<HTMLElement>("button")?.click();
+};
+const ADVANCED = [...SETTINGS, row("Advanced")] as const;
+const openDetails = (selector: string) => (root: ParentNode) => {
+  const node = root.querySelector<HTMLDetailsElement>(selector);
+  if (node) node.open = true;
+};
+const RECEIVE = click(".popup__actions button", "Receive");
 /** An earlier withdrawal whose request is with a relayer: the list says its outcome is not known. */
 const openSurface: ActivityEntry = { id: "p2", kind: "surface", status: "unknown", at: NOW - 12 * 60_000, amount: "2000000000", fee: "2500000", counterparty: DEST };
 /** A spend that failed after its request had been handed to a relayer. */
@@ -353,12 +367,19 @@ const STORIES: Record<string, Story> = {
   "surface-form-small": { snapshot: base, draft: { kind: "surface", to: DEST, amount: "0.0005" }, quote: quoteSpend, address: { ok: true, address: DEST, own: false } },
   "surface-proving": { snapshot: { ...base, flow: flow({ kind: "surface", step: "proving", status: "running", amount: "2000000000", fee: "2500000", to: DEST }) } },
 
-  receive: { snapshot: base, after: click("a.link--quiet", "Receive") },
-  "receive-code": { snapshot: base, after: chain(click("a.link--quiet", "Receive"), click(".receive__code button", "Make a payment code"), reveal(".receive__code", "start")) },
+  receive: { snapshot: base, after: RECEIVE },
+  "receive-code": { snapshot: base, after: chain(RECEIVE, openDetails(".receive__more details:nth-of-type(2)"), click(".receive__code button", "Make a payment code"), reveal(".receive__more", "start")) },
+  "receive-address": { snapshot: base, after: chain(RECEIVE, openDetails(".receive__more details:nth-of-type(1)"), reveal(".receive__more", "start")) },
+  "receive-pay-link": {
+    snapshot: base,
+    payLink: { status: "kept", code: PAYMENT_CODE, link: `${PAY_PAGE}${PAYMENT_CODE}` },
+    after: chain(RECEIVE, reveal("#receive-paylink-title", "start")),
+  },
+  "receive-pay-link-new": { snapshot: base, after: chain(RECEIVE, click(".paylink button", "Make your pay link"), reveal("#receive-paylink-title", "start")) },
   "receive-code-limit": {
     snapshot: base,
     code: { status: "limit", code: PAYMENT_CODE, made: 20 },
-    after: chain(click("a.link--quiet", "Receive"), click(".receive__code button", "Make a payment code"), reveal(".receive__code", "start")),
+    after: chain(RECEIVE, openDetails(".receive__more details:nth-of-type(2)"), click(".receive__code button", "Make a payment code"), reveal(".receive__more", "start")),
   },
   activity: { snapshot: { ...base, activity }, after: click(".popup__deep-head a", "All activity") },
   "activity-receipt": {
@@ -373,13 +394,13 @@ const STORIES: Record<string, Story> = {
     snapshot: { ...base, activity: activity.map(({ counterparty, ...entry }) => (entry.id === "a2" ? { ...entry, claim: true as const, record: true as const } : { ...entry, ...(counterparty ? { counterparty } : {}) })) },
     after: chain(click(".popup__deep-head a", "All activity"), click(".activity--full li:nth-child(2) button"), reveal(".activity__proof", "center")),
   },
-  "send-form-link": { snapshot: base, draft: { kind: "send", to: "", amount: "0.5" }, quote: quoteSpend, after: chain(() => undefined, click("#form-send-form .toggle")) },
-  "receive-collect": { snapshot: base, after: chain(click("a.link--quiet", "Receive"), reveal("#collect-title", "start")) },
-  "settings-depth": { snapshot: base, after: chain(...SETTINGS, reveal("#set-depth", "start")) },
+  "send-form-link": { snapshot: base, draft: { kind: "send", to: "", amount: "0.5" }, quote: quoteSpend, after: chain(() => undefined, click(".form__switch", "Send as a link instead")) },
+  "receive-collect": { snapshot: base, after: chain(RECEIVE, openDetails(".receive__more details:nth-of-type(3)"), reveal(".receive__more", "start")) },
+  "settings-depth": { snapshot: base, after: chain(...SETTINGS, row("Prove depth")) },
   // The proof is made: the code, the link, and what it shows and costs.
   "settings-depth-made": {
     snapshot: base,
-    after: chain(...SETTINGS, type("#depth-amount", "5"), type("#depth-challenge", "OTC desk 2026-10-20 #7f3a"), click(".settings button", "Make the proof"), reveal("#set-depth", "start")),
+    after: chain(...SETTINGS, row("Prove depth"), type("#depth-amount", "5"), type("#depth-challenge", "OTC desk 2026-10-20 #7f3a"), click(".settings button", "Make the proof")),
   },
   "surface-form-shown": {
     snapshot: base,
@@ -388,7 +409,7 @@ const STORIES: Record<string, Story> = {
     address: { ok: true, address: DEST, own: false },
     warnings: [{ id: "shown" }],
   },
-  "settings-viewing-key": { snapshot: base, after: chain(click(".address-chip"), click(".picklist__row", "SettingsEndpoints, palette, this device"), click(".settings button", "Show viewing key"), reveal("#set-viewing", "start")) },
+  "settings-viewing-key": { snapshot: base, after: chain(...SETTINGS, row("Viewing key"), click(".settings button", "Show viewing key")) },
   "activity-open": { snapshot: { ...base, activity }, after: chain(click(".popup__deep-head a", "All activity"), click(".activity--full li:nth-child(2) button")) },
   report: { snapshot: base, after: click(".score") },
   "report-statement": { snapshot: base, after: chain(click(".score"), scrollTo(".popup__view", 330)) },
@@ -399,22 +420,23 @@ const STORIES: Record<string, Story> = {
   // The connect page was changed in the form and Save was pressed: Loch asks before it is sent.
   "settings-connect-confirm": {
     snapshot: base,
-    after: chain(...SETTINGS, type("#set-connectUrl", "https://pages.example.org/connect.html"), click(".settings button", "Save endpoints"), reveal(".settings [role='alertdialog']", "end")),
+    after: chain(...ADVANCED, type("#set-connectUrl", "https://pages.example.org/connect.html"), click(".settings button", "Save endpoints"), reveal(".settings [role='alertdialog']", "end")),
   },
   // A release build: the connect page is compiled in, and there is no field for it.
   "settings-connect-fixed": {
     snapshot: { ...base, settings: { ...base.settings, connectFixed: true } },
-    after: chain(...SETTINGS, reveal("#set-maxfee", "end")),
+    after: chain(...ADVANCED, reveal("#set-maxfee", "end")),
   },
-  "settings-websites": { snapshot: base, after: chain(...SETTINGS, reveal("#set-wrapper", "start")) },
-  "settings-more": { snapshot: base, after: chain(click(".address-chip"), click(".picklist__row", "SettingsEndpoints, palette, this device"), scrollTo(".popup__view", 560)) },
+  "settings-websites": { snapshot: base, after: chain(...SETTINGS, row("Connected sites")) },
+  "settings-advanced": { snapshot: base, after: chain(...ADVANCED) },
+  "settings-more": { snapshot: base, after: chain(...ADVANCED, scrollTo(".popup__view", 560)) },
   "settings-forget": {
     snapshot: base,
-    after: chain(click(".address-chip"), click(".picklist__row", "SettingsEndpoints, palette, this device"), click(".settings button", "Forget this wallet on this device"), (root) =>
+    after: chain(...ADVANCED, click(".settings button", "Forget this wallet on this device"), (root) =>
       setTimeout(() => root.querySelector("[role='alertdialog'].notice")?.scrollIntoView({ block: "center" }), 80),
     ),
   },
-  "settings-about": { snapshot: base, after: chain(click(".address-chip"), click(".picklist__row", "SettingsEndpoints, palette, this device"), scrollTo(".popup__view", 4000)) },
+  "settings-about": { snapshot: base, after: chain(...ADVANCED, openDetails("#set-about"), scrollTo(".popup__view", 4000)) },
 };
 
 const WIDE_AFTER: Record<string, (root: ParentNode) => void> = {
@@ -424,7 +446,7 @@ const WIDE_AFTER: Record<string, (root: ParentNode) => void> = {
 
 const params = new URLSearchParams(location.search);
 const name = params.get("story") ?? "home";
-const theme = params.get("theme") === "night" ? "night" : "dusk";
+const theme = params.get("theme") === "dusk" ? "dusk" : "night";
 const popup = params.get("view") !== "wide";
 const story = STORIES[name] ?? STORIES.home!;
 const snapshot: Snapshot = { ...story.snapshot, settings: { ...story.snapshot.settings, theme } };
@@ -454,6 +476,9 @@ const api: Api = {
       }
       case "payment-code":
         return ok(story.code ?? ({ status: "made", code: PAYMENT_CODE, made: 1 } satisfies PaymentCodeReply)) as UiReply<T>;
+      case "pay-link":
+        if (request.action === "show") return ok(story.payLink ?? null) as UiReply<T>;
+        return ok(story.payLink ?? ({ status: "made", code: PAYMENT_CODE, link: `${PAY_PAGE}${PAYMENT_CODE}` } satisfies PayLinkReply)) as UiReply<T>;
       default:
         return ok(null) as UiReply<T>;
     }

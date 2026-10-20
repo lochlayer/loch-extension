@@ -39,6 +39,11 @@ export interface Settings {
    */
   connectUrl: string;
   theme: "dusk" | "night";
+  /**
+   * The person picked the palette in settings. Until then it is night, the default since 0.1.4;
+   * a "dusk" stored by an earlier version without this was its default, not a choice.
+   */
+  themeChosen: boolean;
   /** Register the Loch wallet on web pages (leak warnings, key-derivation guard). */
   wrapperEnabled: boolean;
   /** Let the in-page warning interrupt for a first-time recipient too (a low-severity finding). */
@@ -53,7 +58,8 @@ export const DEFAULT_SETTINGS: Settings = {
   relayerUrl: defaultServiceUrls().relayerUrl ?? DEFAULTS.relayerUrl,
   screenerUrl: defaultServiceUrls().screenerUrl ?? DEFAULTS.screenerUrl,
   connectUrl: DEFAULTS.connectUrl,
-  theme: "dusk",
+  theme: "night",
+  themeChosen: false,
   wrapperEnabled: true,
   warnFirstRecipients: false,
   maxFeeLamports: DEFAULTS.maxFeeLamports,
@@ -169,7 +175,8 @@ export function normaliseSettings(stored: unknown): Settings {
     relayerUrl: endpointOr(s.relayerUrl, DEFAULT_SETTINGS.relayerUrl),
     screenerUrl: endpointOr(s.screenerUrl, DEFAULT_SETTINGS.screenerUrl),
     connectUrl: connectUrlOr(s.connectUrl, DEFAULT_SETTINGS.connectUrl),
-    theme: s.theme === "night" ? "night" : "dusk",
+    theme: s.themeChosen === true && s.theme === "dusk" ? "dusk" : "night",
+    themeChosen: s.themeChosen === true,
     wrapperEnabled: typeof s.wrapperEnabled === "boolean" ? s.wrapperEnabled : true,
     warnFirstRecipients: s.warnFirstRecipients === true,
     maxFeeLamports: maxFee,

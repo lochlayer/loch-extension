@@ -28,6 +28,8 @@ export interface ReceivedInput {
   ownOutputs: ReadonlySet<string>;
   /** True for the first sync of a wallet on this device: what it finds predates the device. */
   firstSync: boolean;
+  /** Index of the payment code behind the wallet's pay link, if it has one. */
+  payLink?: number | null;
   now: number;
 }
 
@@ -56,11 +58,14 @@ export function entriesForReceived(input: ReceivedInput): ActivityEntry[] {
     const total = unspent.reduce((sum, note) => sum + note.amount, 0n);
     return [{ id: `restored-${unspent[0]!.leafIndex}`, kind: "restored", status: "confirmed", at: input.now, amount: total.toString(), count: unspent.length }];
   }
+  const viaPayLink = (note: ReceivedNote) =>
+    input.payLink !== null && input.payLink !== undefined && typeof note.source === "object" && note.source.code === input.payLink;
   return foreign.map((note) => ({
     id: `rx-${note.leafIndex}`,
     kind: "receive" as const,
     status: "confirmed" as const,
     at: arrivedAt(note, input.now),
     amount: note.amount.toString(),
+    ...(viaPayLink(note) ? { via: "pay-link" as const } : {}),
   }));
 }

@@ -622,14 +622,14 @@ export function failureCopy(failure: Failure, context: FailureContext): FailureC
 
 // ------------------------------------------------------------------ activity
 
-export function activityTitle(entry: Pick<ActivityEntry, "kind" | "claim">): string {
+export function activityTitle(entry: Pick<ActivityEntry, "kind" | "claim" | "via">): string {
   switch (entry.kind) {
     case "dive":
       return "Dived in";
     case "send":
       return entry.claim ? "Paid to a claim link" : "Sent privately";
     case "receive":
-      return "Received privately";
+      return entry.via === "pay-link" ? "Paid to your pay link" : "Received privately";
     case "surface":
       return "Surfaced";
     case "consolidate":
@@ -778,6 +778,23 @@ export const DEPTH_COPY = {
   shownAdvice: "Send the amount to yourself first: the new notes are in no proof.",
 } as const;
 
+/** The pay link on the Receive screen. */
+export const PAY_LINK_COPY = {
+  title: "Your pay link",
+  lede: "Post it anywhere. Anyone can pay you from Phantom, without Loch. They see this link, not your wallet. What they pay arrives in your shielded balance.",
+  make: "Make your pay link",
+  copy: "Copy link",
+  copied: "Pay link copied.",
+  copyFailed: "Could not copy. Select the link instead.",
+  makeFailed: "Could not make a pay link. Unlock the wallet and try again.",
+  renew: "New link",
+  renewed: "A new link is ready. The old one still works.",
+  linkLabel: "Your pay link",
+  cost: "Everyone who sees the link can tell that payments to it go to the same person. The payer's wallet and the amount they pay are public, as with any dive-in.",
+  renewNote: "A new link does not stop the old one: what is paid to it still arrives.",
+  limit: "Twenty payment codes are waiting to be paid, so no new link was made. This is the one you have.",
+} as const;
+
 /** Words for a depth proof that could not be made, by the error code the worker answered with. */
 export function depthErrorText(code: string): string {
   switch (code) {
@@ -796,3 +813,130 @@ export function depthErrorText(code: string): string {
       return "Loch could not make the proof. Check the connection and try again.";
   }
 }
+
+// ----------------------------------------------------------------- 0.1.4 interface
+//
+// The interface since 0.1.4 says one short thing per screen. What used to be explained in place
+// is behind "How it works" or on the website's docs page, under these anchors.
+
+/** The website's docs page; each screen links its own section. */
+export const DOCS_PAGE = "https://lochlayer.com/docs";
+
+export const DOCS_ANCHOR = {
+  dive: "screening",
+  send: "relayer",
+  surface: "observer",
+  receive: "keys",
+  payLink: "pay",
+  paymentCode: "quantum",
+  claim: "claim",
+  depth: "depth",
+  viewingKey: "disclosure",
+  network: "network",
+} as const;
+
+export const HOME_COPY = {
+  shielded: "Shielded balance",
+  public: "Public",
+  privacy: "Privacy",
+  scan: "Scan",
+  recent: "Recent",
+  all: "All activity",
+  empty: "Nothing in the Loch yet.",
+  emptyTitle: "No activity yet",
+  emptyLine: "Dive in to start. The deposit is public; what you do after it is not.",
+  locked: (wallet: string) => `Locked. One signature from ${wallet} unlocks it.`,
+  lockedLine: "Your balance and activity are kept on this device, encrypted.",
+  settings: "Settings",
+} as const;
+
+/** The labels of the four actions on the home screen. The sheets keep their full names. */
+export const HOME_ACTIONS = { dive: "Dive in", send: "Send", receive: "Receive", surface: "Surface" } as const;
+
+export const WELCOME_COPY = {
+  line: "A shielded balance inside the Solana wallet you already use. No new seed phrase.",
+  connect: "Connect wallet",
+  fine: "Your wallet signs one message. Nothing moves.",
+} as const;
+
+export const HOW_IT_WORKS = "How it works";
+export const MORE_IN_DOCS = "More in the docs";
+
+export const FORM_COPY = {
+  toSend: "To",
+  toSendPlaceholder: "Shielded address or payment code",
+  toSurface: "To",
+  toSurfacePlaceholder: "Public Solana address",
+  amount: "Amount",
+  asLink: "Send as a link instead",
+  asAddress: "Send to an address instead",
+  linkLine: "Whoever opens the link first gets it, so send it privately. Until then you can take it back.",
+  fee: "Fee",
+  collectFee: "Fee to collect",
+  networkFee: "Network fee and rent",
+  total: "Total",
+  enterAmount: "Enter an amount",
+  ownAddress: "This is your own shielded address.",
+  ownCode: "This is one of your own payment codes.",
+  screening: (policy?: string) => `A screening service co-signs each deposit and may decline it. It sees your address and the amount.${policy ? ` Its policy: ${policy}` : ""}`,
+  poolMax: (sol: string) => `The pool takes at most ${pub(sol)} SOL in one deposit.`,
+  surfaceMin: (sol: string) => `Surface at least ${pub(sol)} SOL: a new address must hold rent to exist.`,
+  code: "A payment code keeps what you send unreadable even if today’s encryption is broken later.",
+  warningTitle: "This points back at your deposit",
+  warningAdvice: "Another amount, later, to a fresh address gives less away.",
+  combineTitle: "Combine notes first",
+  combineLine: "One transaction spends two notes. Combining merges them, for one fee. Then send.",
+} as const;
+
+export const RECEIVE_COPY = {
+  title: "Receive",
+  payLine: "Anyone can pay it from Phantom, without Loch. It arrives here, shielded.",
+  address: "Shielded address",
+  addressLine: "For someone who pays you from their own Loch.",
+  addressNote: "It is the same every time: two payers who compare can tell it is one person.",
+  copyAddress: "Copy address",
+  code: "Payment code",
+  codeLine: "For one payer. Make a new one for the next.",
+  codeMore: "Your address with a secret added. What that payer sends stays unreadable even to someone who records the chain today and breaks today’s encryption later.",
+  makeCode: "Make a payment code",
+  copyCode: "Copy code",
+  another: "Make another",
+  collect: "Collect a claim link",
+  collectLine: "Paste the link someone sent you. The fee comes out of it.",
+} as const;
+
+export const SETTINGS_COPY = {
+  title: "Settings",
+  back: "Back",
+  palette: "Palette",
+  depth: "Prove depth",
+  depthNote: "Proof of funds",
+  viewing: "Viewing key",
+  viewingNote: "For an accountant",
+  sites: "Connected sites",
+  sitesOn: "On",
+  sitesOff: "Off",
+  advanced: "Advanced",
+  advancedNote: "Endpoints, this device, about",
+  settingsNote: "Palette, keys, advanced",
+  viewingLine: "Whoever holds it sees what this wallet receives. They cannot spend.",
+  viewingCaution: "It cannot be taken back. For one payment, give a receipt instead.",
+  depthLine: "Show that you hold at least an amount, and nothing else.",
+  sitesLine: "Websites see a wallet named Loch that passes everything on to your wallet, after two checks.",
+  sitesToggle: "Offer the Loch wallet to websites",
+  sitesToggleNote: "Warns before a public transfer that gives something away, and never passes on a request for your key-derivation signature.",
+  sitesFirst: "Also warn about first-time recipients",
+  sitesFirstNote: "Interrupts whenever a site pays an address you have not paid before.",
+  sitesMore: "A site can always ask your wallet directly, without Loch. While this is on, sites can see that Loch is installed. Takes effect when a page is loaded again.",
+  endpoints: "Endpoints",
+  endpointsLine: "Loch sends requests to these addresses and nothing else.",
+  rpc: "Reads the chain. Sees your IP address.",
+  relayer: "Sends private transfers. Paid from the shielded amount.",
+  screener: "Co-signs deposits. Sees your address and the amount.",
+  connect: "Where your wallet is asked to sign. Changing it asks you to confirm.",
+  maxFee: "Largest relayer fee",
+  maxFeeLine: "Loch refuses a higher fee, whatever the relayer asks.",
+  ohttp: "RPC privacy",
+  device: "This device",
+  about: "About",
+} as const;

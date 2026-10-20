@@ -129,10 +129,11 @@ export type { AppliedEvents, IssuedPaymentCode, OwnedNote, PaymentCodeCounts, Re
 export { createSnarkjsProver, terminateProver, verifyProof } from "./prover.js";
 export type { CircuitInput, ProofResult, Prover, SnarkjsProverOptions, VerificationKey } from "./prover.js";
 
-export { prepareConsolidation, prepareDeposit, prepareTransact, prepareTransfer, prepareWithdrawal } from "./transact.js";
+export { prepareConsolidation, prepareDeposit, preparePaymentDeposit, prepareTransact, prepareTransfer, prepareWithdrawal } from "./transact.js";
 export type {
   OutputRequest,
   PrepareDepositParams,
+  PreparePaymentDepositParams,
   PrepareTransactParams,
   PrepareTransferParams,
   PrepareWithdrawalParams,

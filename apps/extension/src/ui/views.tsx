@@ -9,13 +9,13 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { amountProblemText, exactSol, inputSol, parseAmountInput } from "../shared/amounts.js";
 import { mainnetTestingEnabled } from "../shared/build.js";
 import { CLAIM_PAGE, VERIFY_PAGE } from "../shared/constants.js";
-import { DEPTH_COPY, activityObserver, activityStatusText, depthErrorText, isPublicActivity, shortAddress, verdict, whenText } from "../shared/copy.js";
+import { DEPTH_COPY, DOCS_ANCHOR, HOME_COPY, PAY_LINK_COPY, RECEIVE_COPY, SETTINGS_COPY, activityObserver, activityStatusText, depthErrorText, isPublicActivity, shortAddress, verdict, whenText } from "../shared/copy.js";
 import { activityCsv } from "../shared/export.js";
-import type { ActivityEntry, ClaimCheck, ClaimCodeReply, DepthProofReply, PaymentCodeReply, ReceiptReply, Snapshot, SourceReportReply, ViewingKeyReply } from "../shared/view.js";
+import type { ActivityEntry, ClaimCheck, ClaimCodeReply, DepthProofReply, PayLinkReply, PaymentCodeReply, ReceiptReply, Snapshot, SourceReportReply, ViewingKeyReply } from "../shared/view.js";
 import type { Api } from "./api.js";
 import { ActivityRow } from "./App.js";
 import { connectPlace, useQuote } from "./flows.js";
-import { Amount, AmountField, Field, Icon, Rich, ViewHead } from "./parts.js";
+import { Amount, AmountField, Field, HowItWorks, Icon, Rich, ViewHead } from "./parts.js";
 
 type ToastFn = (text: string, kind?: "done" | "caution" | "plain") => void;
 
@@ -175,8 +175,8 @@ export function ActivityView({ snapshot, api, onClose, toast }: ViewProps & { to
       <ViewHead title="Activity" onClose={onClose} />
       {snapshot.activity.length === 0 ? (
         <div class="empty">
-          <p class="empty__title">No activity yet</p>
-          <p>Dive in to move {mainnetTestingEnabled() ? "SOL" : "test SOL"} from your public wallet into your shielded balance. The deposit is public. What you do after it is not.</p>
+          <p class="empty__title">{HOME_COPY.emptyTitle}</p>
+          <p>{HOME_COPY.emptyLine}</p>
         </div>
       ) : (
         <ul class="activity activity--full">
@@ -203,7 +203,6 @@ export function ActivityView({ snapshot, api, onClose, toast }: ViewProps & { to
         <span>Upright is public on-chain.</span>
         <span class="is-shielded">Italic is shielded.</span>
       </p>
-      <p class="t-fine">This list is kept on this device, encrypted. The chain cannot give it back: a sender cannot read the notes it sent.</p>
       {snapshot.activity.length > 0 && (
         <p>
           <button
@@ -224,8 +223,51 @@ export function ActivityView({ snapshot, api, onClose, toast }: ViewProps & { to
 
 // ---------------------------------------------------------------------- receive
 
-/** The shielded address with its copy button. `compact` leaves the explanations to the tab's own view. */
+/**
+ * Receiving. The pay link comes first: it is what most people want. The shielded address, a
+ * payment code for one payer, and collecting a claim link are folded away under it. `compact`
+ * (the expanded view's column) shows the shielded address alone.
+ */
 export function ReceiveBlock({ snapshot, api, toast, compact }: { snapshot: Snapshot; api: Api; toast: ToastFn; compact?: boolean }) {
+  if (compact) return <AddressBlock snapshot={snapshot} api={api} toast={toast} compact />;
+  return (
+    <div class="receive">
+      <PayLinkBlock api={api} toast={toast} />
+      <div class="receive__more">
+        <details class="disclosure">
+          <summary>
+            <Icon name="chevron" small />
+            <span>{RECEIVE_COPY.address}</span>
+          </summary>
+          <div class="disclosure__body">
+            <AddressBlock snapshot={snapshot} api={api} toast={toast} />
+          </div>
+        </details>
+        <details class="disclosure">
+          <summary>
+            <Icon name="chevron" small />
+            <span>{RECEIVE_COPY.code}</span>
+          </summary>
+          <div class="disclosure__body">
+            <PaymentCodeBlock api={api} toast={toast} />
+          </div>
+        </details>
+        <details class="disclosure">
+          <summary>
+            <Icon name="chevron" small />
+            <span>{RECEIVE_COPY.collect}</span>
+          </summary>
+          <div class="disclosure__body">
+            <CollectBlock api={api} snapshot={snapshot} />
+          </div>
+        </details>
+      </div>
+    </div>
+  );
+}
+
+/** The shielded address with its copy button. */
+function AddressBlock({ snapshot, api, toast, compact }: { snapshot: Snapshot; api: Api; toast: ToastFn; compact?: boolean }) {
   const [copied, setCopied] = useState(false);
   const address = snapshot.shielded?.address ?? "";
   const copy = () =>
@@ -237,33 +279,16 @@ export function ReceiveBlock({ snapshot, api, toast, compact }: { snapshot: Snap
       toast(ok ? "Shielded address copied." : "Could not copy. Select the address instead.", ok ? "done" : "caution");
     });
   return (
-    <div class="receive">
-      {!compact && (
-        <p class="t-label" id="receive-label">
-          Your shielded address
-        </p>
-      )}
+    <div class="receive__block">
+      {!compact && <p class="t-small">{RECEIVE_COPY.addressLine}</p>}
       <p class="address-full is-shielded receive__address" aria-label="Your shielded address">
         {groupAddress(address)}
       </p>
-      <button class={`btn ${compact ? "btn--secondary btn--sm" : "btn--primary"}`} type="button" onClick={copy}>
-        <Icon name={copied ? "check" : "copy"} />
-        {copied ? "Copied" : "Copy address"}
+      <button class="btn btn--secondary btn--sm" type="button" onClick={copy}>
+        <Icon name={copied ? "check" : "copy"} small />
+        {copied ? "Copied" : RECEIVE_COPY.copyAddress}
       </button>
-      <p class="t-small">Give it to whoever pays you from their own Loch. The payment shows up here after the next sync.</p>
-      {!compact && (
-        <>
-          <p class="observer">
-            <span class="observer__label">An observer sees</span> a proof and a fee when someone pays you. Nothing in it points to you.
-          </p>
-          <p class="notice notice--inline">
-            <Icon name="info" />
-            <span>The address is the same every time: two people who compare the addresses they pay can tell it is one person.</span>
-          </p>
-          <PaymentCodeBlock api={api} toast={toast} />
-          <CollectBlock api={api} snapshot={snapshot} />
-        </>
-      )}
+      {!compact && <p class="t-fine">{RECEIVE_COPY.addressNote}</p>}
     </div>
   );
 }
@@ -310,11 +335,10 @@ function CollectBlock({ api, snapshot }: { api: Api; snapshot: Snapshot }) {
   };
   const error = check && !check.ok ? CLAIM_PROBLEM[check.reason] : tooSmall ? "The link holds less than the relayer’s fee for collecting it." : aboveLimit ? "The relayer’s fee is above your limit. Raise it or choose another relayer in settings." : failed ? "Loch could not start this. Finish what is in progress and try again." : null;
   return (
-    <section class="receive__code" aria-labelledby="collect-title">
-      <h3 class="t-label" id="collect-title">
-        A claim link, from someone who paid you
-      </h3>
-      <p class="t-small">Paste the link they sent. The payment in it moves to your shielded balance; the relayer&rsquo;s fee comes out of it.</p>
+    <section class="receive__block" aria-labelledby="collect-title">
+      <p class="t-small" id="collect-title">
+        {RECEIVE_COPY.collectLine}
+      </p>
       <Field label="Claim link" id="collect-link" error={error}>
         <textarea
           class="input"
@@ -358,7 +382,7 @@ function CollectBlock({ api, snapshot }: { api: Api; snapshot: Snapshot }) {
         </p>
       )}
       <div class="receive__actions">
-        <button class="btn btn--primary" type="button" aria-disabled={ready ? undefined : "true"} onClick={() => void collect()}>
+        <button class="btn btn--secondary btn--sm" type="button" aria-disabled={ready ? undefined : "true"} onClick={() => void collect()}>
           {check?.ok && check.own ? "Take it back" : "Collect"}
         </button>
       </div>
@@ -378,16 +402,13 @@ function ViewingKeySection({ api, toast, unlocked }: { api: Api; toast: ToastFn;
     else toast("Unlock the wallet to see its viewing key.", "caution");
   };
   return (
-    <section class="settings__section" aria-labelledby="set-viewing">
-      <h3 class="settings__title" id="set-viewing">
-        Viewing key
-      </h3>
-      <p class="t-small">
-        For an accountant or an auditor. Whoever holds it sees every payment this wallet receives, with its amount: payments from others, your own deposits and your change, past and future. They cannot spend, and they cannot see which notes you have spent, so not your balance or what you paid out.
+    <section class="settings__page" aria-labelledby="set-viewing">
+      <p class="t-small" id="set-viewing">
+        {SETTINGS_COPY.viewingLine}
       </p>
       <p class="notice notice--inline">
         <Icon name="caution" />
-        <span>It cannot be taken back. Once someone has it, they can read what this wallet receives for as long as the wallet exists. For one payment, give a receipt instead.</span>
+        <span>{SETTINGS_COPY.viewingCaution}</span>
       </p>
       {key && (
         <p class="address-full is-shielded receive__address" aria-label="Your viewing key">
@@ -411,7 +432,13 @@ function ViewingKeySection({ api, toast, unlocked }: { api: Api; toast: ToastFn;
           </button>
         )}
       </div>
-      <p class="t-fine">They read it at {VERIFY_PAGE}, or with the SDK.</p>
+      <HowItWorks anchor={DOCS_ANCHOR.viewingKey}>
+        <p>
+          Whoever holds it sees every payment this wallet receives, with its amount: payments from others, your own deposits and your change, past and future. They cannot spend, and they cannot see which notes
+          you have spent, so not your balance or what you paid out.
+        </p>
+        <p>They read it at {VERIFY_PAGE}, or with the SDK.</p>
+      </HowItWorks>
     </section>
   );
 }
@@ -444,11 +471,10 @@ export function DepthProofSection({ api, toast, unlocked }: { api: Api; toast: T
   };
   const copy = (text: string, what: string) => void api.copy(text).then((ok) => toast(ok ? `${what} copied.` : "Could not copy. Select it instead.", ok ? "done" : "caution"));
   return (
-    <section class="settings__section" aria-labelledby="set-depth">
-      <h3 class="settings__title" id="set-depth">
-        {DEPTH_COPY.title}
-      </h3>
-      <p class="t-small">{DEPTH_COPY.lede}</p>
+    <section class="settings__page" aria-labelledby="set-depth">
+      <p class="t-small" id="set-depth">
+        {SETTINGS_COPY.depthLine}
+      </p>
       {made ? (
         <>
           <p class="address-full receive__address" aria-label={DEPTH_COPY.codeLabel}>
@@ -470,7 +496,9 @@ export function DepthProofSection({ api, toast, unlocked }: { api: Api; toast: T
               Done
             </button>
           </div>
-          <p class="t-fine">{DEPTH_COPY.checkAt}</p>
+          <HowItWorks anchor={DOCS_ANCHOR.depth}>
+            <p>{DEPTH_COPY.checkAt}</p>
+          </HowItWorks>
         </>
       ) : (
         <>
@@ -486,7 +514,7 @@ export function DepthProofSection({ api, toast, unlocked }: { api: Api; toast: T
             error={touched && !parsed.ok ? amountProblemText(parsed.problem) : null}
             disabled={!unlocked}
           />
-          <Field label={DEPTH_COPY.challengeLabel} id="depth-challenge" hint={DEPTH_COPY.challengeHint} error={touched ? challengeError : null}>
+          <Field label={DEPTH_COPY.challengeLabel} id="depth-challenge" error={touched ? challengeError : null}>
             <input
               class="input"
               id="depth-challenge"
@@ -506,14 +534,101 @@ export function DepthProofSection({ api, toast, unlocked }: { api: Api; toast: T
             </p>
           )}
           <div class="cluster">
-            <button class="btn btn--secondary btn--sm" type="button" aria-disabled={ready ? undefined : "true"} disabled={!unlocked} onClick={() => void make()}>
+            <button class="btn btn--primary" type="button" aria-disabled={ready ? undefined : "true"} disabled={!unlocked} onClick={() => void make()}>
               {busy ? DEPTH_COPY.making : DEPTH_COPY.make}
             </button>
           </div>
+          <HowItWorks anchor={DOCS_ANCHOR.depth}>
+            <p>{DEPTH_COPY.lede}</p>
+            <p>{DEPTH_COPY.challengeHint}</p>
+          </HowItWorks>
         </>
       )}
     </section>
   );
+}
+
+/**
+ * The pay link: one payment code of the wallet's own, after lochlayer.com/pay/, for anyone to
+ * pay from a wallet that opens Blinks. The worker keeps which code it is, so the same link comes
+ * back every time; "New link" moves to a fresh code and the old link keeps working. The link is
+ * meant to be posted, so it is set upright.
+ */
+function PayLinkBlock({ api, toast }: { api: Api; toast: ToastFn }) {
+  const [link, setLink] = useState<PayLinkReply | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void api.call<PayLinkReply | null>({ loch: "ui", type: "pay-link", action: "show" }).then((reply) => {
+      if (live && reply.ok) setLink(reply.value);
+    });
+    return () => {
+      live = false;
+    };
+  }, [api]);
+  const ask = async (action: "make" | "new") => {
+    setBusy(true);
+    const reply = await api.call<PayLinkReply | null>({ loch: "ui", type: "pay-link", action });
+    setBusy(false);
+    if (!reply.ok || !reply.value) {
+      toast(PAY_LINK_COPY.makeFailed, "caution");
+      return;
+    }
+    setLink(reply.value);
+    setCopied(false);
+    if (action === "new") toast(reply.value.status === "limit" ? PAY_LINK_COPY.limit : PAY_LINK_COPY.renewed, reply.value.status === "limit" ? "caution" : "done");
+  };
+  const copy = () =>
+    void api.copy(link?.link ?? "").then((ok) => {
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+      toast(ok ? PAY_LINK_COPY.copied : PAY_LINK_COPY.copyFailed, ok ? "done" : "caution");
+    });
+  return (
+    <section class="paylink" aria-labelledby="receive-paylink-title">
+      <h3 class="paylink__title" id="receive-paylink-title">
+        {PAY_LINK_COPY.title}
+      </h3>
+      {link && (
+        <p class="paylink__link fig" aria-label={PAY_LINK_COPY.linkLabel} title={link.link}>
+          {shortLink(link.link)}
+        </p>
+      )}
+      <div class="receive__actions">
+        {link ? (
+          <>
+            <button class="btn btn--primary" type="button" onClick={copy}>
+              <Icon name={copied ? "check" : "copy"} />
+              {copied ? "Copied" : PAY_LINK_COPY.copy}
+            </button>
+            <button class="btn btn--quiet" type="button" aria-busy={busy ? "true" : undefined} onClick={() => void ask("new")}>
+              {PAY_LINK_COPY.renew}
+            </button>
+          </>
+        ) : (
+          <button class="btn btn--primary" type="button" aria-busy={busy ? "true" : undefined} onClick={() => void ask("make")}>
+            {PAY_LINK_COPY.make}
+          </button>
+        )}
+      </div>
+      <p class="t-small">{RECEIVE_COPY.payLine}</p>
+      <HowItWorks anchor={DOCS_ANCHOR.payLink}>
+        <p>{PAY_LINK_COPY.cost}</p>
+        {link && <p>{PAY_LINK_COPY.renewNote}</p>}
+      </HowItWorks>
+    </section>
+  );
+}
+
+/** A pay link as it is shown: host, path, and the code cut in the middle. Copying gives the whole. */
+function shortLink(link: string): string {
+  const text = link.replace(/^https:\/\//, "");
+  const slash = text.lastIndexOf("/");
+  const code = text.slice(slash + 1);
+  return code.length > 24 ? `${text.slice(0, slash + 1)}${code.slice(0, 12)}…${code.slice(-6)}` : text;
 }
 
 /**
@@ -542,12 +657,9 @@ function PaymentCodeBlock({ api, toast }: { api: Api; toast: ToastFn }) {
       toast(ok ? "Payment code copied." : "Could not copy. Select the code instead.", ok ? "done" : "caution");
     });
   return (
-    <section class="receive__code" aria-labelledby="receive-code-title">
-      <h3 class="t-label" id="receive-code-title">
-        A payment code, for one payer
-      </h3>
-      <p class="t-small">
-        Your address with a secret added. What that payer sends you stays unreadable even to someone who records the chain today and breaks today&rsquo;s encryption later, which is what a quantum computer could do. A payment to the plain address does not.
+    <section class="receive__block receive__code" aria-labelledby="receive-code-title">
+      <p class="t-small" id="receive-code-title">
+        {RECEIVE_COPY.codeLine}
       </p>
       {made && (
         <>
@@ -557,27 +669,23 @@ function PaymentCodeBlock({ api, toast }: { api: Api; toast: ToastFn }) {
           {made.status === "limit" && (
             <p class="notice notice--inline">
               <Icon name="info" />
-              <span>Twenty codes are waiting to be paid, so no new one was made. This is the newest of them: use it again, or make another once one of them has been paid.</span>
+              <span>Twenty codes are waiting to be paid, so no new one was made. This is the newest of them.</span>
             </p>
           )}
         </>
       )}
       <div class="receive__actions">
         {made && (
-          <button class="btn btn--primary" type="button" onClick={copy}>
-            <Icon name={copied ? "check" : "copy"} />
-            {copied ? "Copied" : "Copy code"}
+          <button class="btn btn--secondary btn--sm" type="button" onClick={copy}>
+            <Icon name={copied ? "check" : "copy"} small />
+            {copied ? "Copied" : RECEIVE_COPY.copyCode}
           </button>
         )}
-        <button class={`btn ${made ? "btn--secondary" : "btn--primary"}`} type="button" aria-busy={busy ? "true" : undefined} onClick={() => void make()}>
-          {made ? "Make another" : "Make a payment code"}
+        <button class={`btn ${made ? "btn--quiet" : "btn--secondary"} btn--sm`} type="button" aria-busy={busy ? "true" : undefined} onClick={() => void make()}>
+          {made ? RECEIVE_COPY.another : RECEIVE_COPY.makeCode}
         </button>
       </div>
-      {made && (
-        <p class="t-small">
-          Send it to that one person, privately, and make another for the next. The code is a secret: someone who has it and can also break today&rsquo;s encryption could read what was paid to it. Nobody can spend with it.
-        </p>
-      )}
+      <p class="t-fine">{RECEIVE_COPY.codeMore}</p>
     </section>
   );
 }
@@ -585,7 +693,7 @@ function PaymentCodeBlock({ api, toast }: { api: Api; toast: ToastFn }) {
 export function ReceiveView({ snapshot, api, onClose, toast }: ViewProps & { toast: ToastFn }) {
   return (
     <>
-      <ViewHead title="Receive privately" onClose={onClose} />
+      <ViewHead title={RECEIVE_COPY.title} onClose={onClose} />
       {snapshot.shielded ? (
         <ReceiveBlock snapshot={snapshot} api={api} toast={toast} />
       ) : (
@@ -802,15 +910,13 @@ export function ReportView({ snapshot, api, onClose }: ViewProps) {
 type EndpointKey = "rpcUrl" | "relayerUrl" | "screenerUrl" | "connectUrl";
 
 const ENDPOINTS: { key: EndpointKey; label: string; hint: string }[] = [
-  { key: "rpcUrl", label: "RPC endpoint", hint: "Reads the chain and sends your deposits. It sees your IP address, and your public address when you dive in, read your public balance or scan. A sync does not name your address." },
-  { key: "relayerUrl", label: "Relayer", hint: "Submits private transfers and withdrawals and is paid a fee from the shielded amount. It sees your IP address." },
-  { key: "screenerUrl", label: "Screening service", hint: "Co-signs deposits. It sees your public address and the amount." },
-  {
-    key: "connectUrl",
-    label: "Connect page",
-    hint: "The one page Loch opens to reach your wallet. Your wallet is asked there for the signature that unlocks your shielded balance, so it must be a page that serves nothing else. Changing it asks you to confirm.",
-  },
+  { key: "rpcUrl", label: "RPC endpoint", hint: SETTINGS_COPY.rpc },
+  { key: "relayerUrl", label: "Relayer", hint: SETTINGS_COPY.relayer },
+  { key: "screenerUrl", label: "Screening service", hint: SETTINGS_COPY.screener },
+  { key: "connectUrl", label: "Connect page", hint: SETTINGS_COPY.connect },
 ];
+
+type SettingsPage = "main" | "depth" | "viewing" | "sites" | "advanced";
 
 /** What the settings say about the key exchange requests to the gateway use. */
 const OHTTP_KEM_NOTE: Record<string, string> = {
@@ -846,6 +952,7 @@ export function SettingsView({ snapshot, api, onClose, toast }: ViewProps & { to
   const [confirmForget, setConfirmForget] = useState(false);
   /** The connect page was changed in the form and Save was pressed: ask before it is sent. */
   const [confirmConnect, setConfirmConnect] = useState(false);
+  const [page, setPage] = useState<SettingsPage>("main");
   const endpoints = settings.connectFixed ? ENDPOINTS.filter(({ key }) => key !== "connectUrl") : ENDPOINTS;
   const active = snapshot.wallets.find((wallet) => wallet.address === snapshot.active);
 
@@ -908,15 +1015,79 @@ export function SettingsView({ snapshot, api, onClose, toast }: ViewProps & { to
   const changed = endpoints.some(({ key }) => values[key] !== settings[key]) || maxFee !== inputSol(BigInt(settings.maxFeeLamports));
   const artifacts = Object.entries(snapshot.build.artifacts);
 
-  return (
-    <div class="settings">
-      <ViewHead title="Settings" onClose={onClose} />
+  const back = () => setPage("main");
+  const row = (target: SettingsPage, label: string, note: string) => (
+    <li>
+      <button class="picklist__row" type="button" onClick={() => setPage(target)}>
+        <span class="picklist__name">{label}</span>
+        <span class="picklist__go">{note}</span>
+        <Icon name="chevron" small />
+      </button>
+    </li>
+  );
 
-      <section class="settings__section" aria-labelledby="set-endpoints">
-        <h3 class="settings__title" id="set-endpoints">
-          Endpoints
-        </h3>
-        <p class="t-fine">These are the only addresses Loch ever sends a request to. There is no telemetry.</p>
+  if (page === "depth" && active) {
+    return (
+      <div class="settings">
+        <ViewHead title={SETTINGS_COPY.depth} onClose={back} closeLabel={SETTINGS_COPY.back} />
+        <DepthProofSection api={api} toast={toast} unlocked={active.unlocked} />
+      </div>
+    );
+  }
+  if (page === "viewing" && active) {
+    return (
+      <div class="settings">
+        <ViewHead title={SETTINGS_COPY.viewing} onClose={back} closeLabel={SETTINGS_COPY.back} />
+        <ViewingKeySection api={api} toast={toast} unlocked={active.unlocked} />
+      </div>
+    );
+  }
+  if (page === "sites") {
+    return (
+      <div class="settings">
+        <ViewHead title={SETTINGS_COPY.sites} onClose={back} closeLabel={SETTINGS_COPY.back} />
+        <section class="settings__page" aria-labelledby="set-wrapper">
+          <p class="t-small" id="set-wrapper">
+            {SETTINGS_COPY.sitesLine}
+          </p>
+          <label class="choice">
+            <input class="toggle" type="checkbox" role="switch" checked={settings.wrapperEnabled} onChange={(event) => void patch({ wrapperEnabled: event.currentTarget.checked })} />
+            <span>
+              {SETTINGS_COPY.sitesToggle}
+              <small>{SETTINGS_COPY.sitesToggleNote}</small>
+            </span>
+          </label>
+          <label class="choice">
+            <input
+              class="toggle"
+              type="checkbox"
+              role="switch"
+              checked={settings.warnFirstRecipients}
+              disabled={!settings.wrapperEnabled}
+              onChange={(event) => void patch({ warnFirstRecipients: event.currentTarget.checked })}
+            />
+            <span>
+              {SETTINGS_COPY.sitesFirst}
+              <small>{SETTINGS_COPY.sitesFirstNote}</small>
+            </span>
+          </label>
+          <HowItWorks anchor={DOCS_ANCHOR.network}>
+            <p>{SETTINGS_COPY.sitesMore}</p>
+          </HowItWorks>
+        </section>
+      </div>
+    );
+  }
+  if (page === "advanced") {
+    return (
+      <div class="settings">
+        <ViewHead title={SETTINGS_COPY.advanced} onClose={back} closeLabel={SETTINGS_COPY.back} />
+
+        <section class="settings__section" aria-labelledby="set-endpoints">
+          <h3 class="settings__title" id="set-endpoints">
+            {SETTINGS_COPY.endpoints}
+          </h3>
+          <p class="t-fine">{SETTINGS_COPY.endpointsLine}</p>
         <form
           class="stack"
           noValidate
@@ -950,9 +1121,9 @@ export function SettingsView({ snapshot, api, onClose, toast }: ViewProps & { to
             </p>
           )}
           <Field
-            label="Largest relayer fee"
+            label={SETTINGS_COPY.maxFee}
             id="set-maxfee"
-            hint={`Loch refuses to prove a transaction whose fee is above this, whatever the relayer asks. Now ${exactSol(BigInt(settings.maxFeeLamports))} SOL.`}
+            hint={SETTINGS_COPY.maxFeeLine}
             error={errors.maxFeeLamports}
           >
             <div class="input-group">
@@ -1004,15 +1175,18 @@ export function SettingsView({ snapshot, api, onClose, toast }: ViewProps & { to
             </div>
           )}
         </form>
-      </section>
+        </section>
 
-      <section class="settings__section" aria-labelledby="set-ohttp">
-        <h3 class="settings__title" id="set-ohttp">
-          RPC privacy
-        </h3>
-        <p class="t-fine">
-          With an Oblivious HTTP relay, the relay sees your IP address and not your requests, and the RPC gateway sees your requests and not your IP address. They must be run by different parties.
-        </p>
+        <details class="disclosure settings__disclosure" id="set-ohttp">
+          <summary>
+            <Icon name="chevron" small />
+            <span>{SETTINGS_COPY.ohttp}</span>
+            <small>{settings.ohttp.enabled ? "On" : "Off"}</small>
+          </summary>
+          <div class="disclosure__body">
+            <p class="t-fine">
+              With an Oblivious HTTP relay, the relay sees your IP address and not your requests, and the RPC gateway sees your requests and not your IP address. They must be run by different parties.
+            </p>
         {settings.ohttp.available ? (
           <div class="stack">
             <Field label="Oblivious relay" id="set-ohttp-relay" error={errors["ohttp.relayUrl"]} hint="Every RPC request is sent here, encrypted for the gateway.">
@@ -1054,67 +1228,17 @@ export function SettingsView({ snapshot, api, onClose, toast }: ViewProps & { to
             <span>This build has no Oblivious HTTP client. Requests go straight to the RPC endpoint.</span>
           </p>
         )}
-      </section>
+          </div>
+        </details>
 
-      <section class="settings__section" aria-labelledby="set-look">
-        <h3 class="settings__title" id="set-look">
-          Palette
-        </h3>
-        <div class="segmented" role="radiogroup" aria-label="Palette">
-          {(["dusk", "night"] as const).map((theme) => (
-            <button role="radio" type="button" aria-checked={settings.theme === theme ? "true" : "false"} onClick={() => void patch({ theme })} key={theme}>
-              {theme === "dusk" ? "Dusk" : "Night"}
-            </button>
-          ))}
-        </div>
-        <p class="t-fine">Dusk has buff land. Night turns the land dark. The water does not change.</p>
-      </section>
-
-      <section class="settings__section" aria-labelledby="set-wrapper">
-        <h3 class="settings__title" id="set-wrapper">
-          On websites
-        </h3>
-        <label class="choice">
-          <input class="toggle" type="checkbox" role="switch" checked={settings.wrapperEnabled} onChange={(event) => void patch({ wrapperEnabled: event.currentTarget.checked })} />
-          <span>
-            Offer the Loch wallet to websites
-            <small>
-              Sites see a wallet named Loch that passes everything on to {active ? active.walletName : "your wallet"} after two checks: it warns before a public transfer that gives something away, and it does not pass on a request for your key-derivation signature. It never
-              changes a transaction.
-            </small>
-          </span>
-        </label>
-        <p class="notice notice--inline">
-          <Icon name="info" />
-          <span>
-            This helps on sites that behave. A site can always ask {active ? active.walletName : "your wallet"} directly, without Loch, and then the prompt of {active ? active.walletName : "your wallet"} itself is the only thing between the site and your signature. While this is on, any site can see that Loch is
-            installed. Takes effect when a page is loaded again.
-          </span>
-        </p>
-        <label class="choice">
-          <input
-            class="toggle"
-            type="checkbox"
-            role="switch"
-            checked={settings.warnFirstRecipients}
-            disabled={!settings.wrapperEnabled}
-            onChange={(event) => void patch({ warnFirstRecipients: event.currentTarget.checked })}
-          />
-          <span>
-            Also warn about first-time recipients
-            <small>The warning interrupts for findings of medium severity or higher. With this on it also interrupts when a site pays an address this wallet has not paid before, which is true of most payments.</small>
-          </span>
-        </label>
-      </section>
-
-      {active && (
-        <section class="settings__section" aria-labelledby="set-wallet">
-          <h3 class="settings__title" id="set-wallet">
-            This wallet on this device
-          </h3>
-          <p class="t-small">
-            <span class="fig is-public">{shortAddress(active.address)}</span> with {active.walletName}. Its notes and activity are stored here encrypted with a key from your wallet&rsquo;s signature.
-          </p>
+        {active && (
+          <section class="settings__section" aria-labelledby="set-wallet">
+            <h3 class="settings__title" id="set-wallet">
+              {SETTINGS_COPY.device}
+            </h3>
+            <p class="t-small">
+              <span class="fig is-public">{shortAddress(active.address)}</span> with {active.walletName}. Stored here, encrypted.
+            </p>
           {confirmForget ? (
             <div class="notice notice--caution" role="alertdialog" aria-labelledby="forget-title">
               <p class="notice__title" id="forget-title">
@@ -1151,16 +1275,16 @@ export function SettingsView({ snapshot, api, onClose, toast }: ViewProps & { to
               </button>
             </div>
           )}
-        </section>
-      )}
+          </section>
+        )}
 
-      {active && <DepthProofSection api={api} toast={toast} unlocked={active.unlocked} />}
-      {active && <ViewingKeySection api={api} toast={toast} unlocked={active.unlocked} />}
-
-      <section class="settings__section" aria-labelledby="set-about">
-        <h3 class="settings__title" id="set-about">
-          About
-        </h3>
+        <details class="disclosure settings__disclosure" id="set-about">
+          <summary>
+            <Icon name="chevron" small />
+            <span>{SETTINGS_COPY.about}</span>
+            <small>Loch {snapshot.version}</small>
+          </summary>
+          <div class="disclosure__body">
         <dl class="deflist deflist--kv">
           <div class="deflist__row">
             <dt>Version</dt>
@@ -1215,7 +1339,35 @@ export function SettingsView({ snapshot, api, onClose, toast }: ViewProps & { to
           </a>
           .
         </p>
-      </section>
+          </div>
+        </details>
+      </div>
+    );
+  }
+
+  return (
+    <div class="settings">
+      <ViewHead title={SETTINGS_COPY.title} onClose={onClose} />
+      <ul class="picklist settings__list" aria-label={SETTINGS_COPY.title}>
+        <li class="settings__row">
+          <span class="picklist__row settings__static">
+            <span class="picklist__name" id="set-look">
+              {SETTINGS_COPY.palette}
+            </span>
+            <span class="segmented segmented--sm" role="radiogroup" aria-labelledby="set-look">
+              {(["night", "dusk"] as const).map((theme) => (
+                <button role="radio" type="button" aria-checked={settings.theme === theme ? "true" : "false"} onClick={() => void patch({ theme })} key={theme}>
+                  {theme === "dusk" ? "Dusk" : "Night"}
+                </button>
+              ))}
+            </span>
+          </span>
+        </li>
+        {active && row("depth", SETTINGS_COPY.depth, SETTINGS_COPY.depthNote)}
+        {active && row("viewing", SETTINGS_COPY.viewing, SETTINGS_COPY.viewingNote)}
+        {row("sites", SETTINGS_COPY.sites, settings.wrapperEnabled ? SETTINGS_COPY.sitesOn : SETTINGS_COPY.sitesOff)}
+        {row("advanced", SETTINGS_COPY.advanced, SETTINGS_COPY.advancedNote)}
+      </ul>
     </div>
   );
 }

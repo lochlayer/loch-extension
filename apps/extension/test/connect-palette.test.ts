@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import { handleContent, handleUi } from "../src/background/router.js";
+import { normaliseSettings } from "../src/background/settings.js";
 import type { ContentConfig } from "../src/shared/messages.js";
 import { type Harness, createHarness } from "./harness.js";
 import { connect } from "./steps.js";
@@ -37,8 +38,18 @@ describe("the connect page follows the palette chosen in Loch", () => {
     }
   });
 
-  it("and is told nothing about a palette in dusk, the default", async () => {
+  it("night is the default: a new installation tells the bridge page night", async () => {
     const h = createHarness();
+    expect((await h.core.settings()).theme).toBe("night");
+    const seen = watchBridgeTabs(h);
+    await connect(h);
+    expect(seen.length).toBeGreaterThan(0);
+    for (const { told } of seen) expect(told).toMatchObject({ bridge: true, night: true });
+  });
+
+  it("and is told nothing about a palette when dusk is chosen", async () => {
+    const h = createHarness();
+    await setTheme(h, "dusk");
     const seen = watchBridgeTabs(h);
     await connect(h);
     expect(seen.length).toBeGreaterThan(0);
@@ -73,5 +84,20 @@ describe("the connect page follows the palette chosen in Loch", () => {
     await connect(h);
     expect(seen.length).toBeGreaterThan(0);
     for (const { told } of seen) expect(told).toEqual({ enabled: false, wallet: null, bridge: true, night: true });
+  });
+});
+
+describe("the palette after an update", () => {
+  it("a dusk stored by an earlier version, which was its default, becomes night; a dusk the person chose stays", () => {
+    expect(normaliseSettings({ theme: "dusk" }).theme).toBe("night");
+    expect(normaliseSettings({ theme: "night" }).theme).toBe("night");
+    expect(normaliseSettings({}).theme).toBe("night");
+    expect(normaliseSettings({ theme: "dusk", themeChosen: true }).theme).toBe("dusk");
+  });
+
+  it("choosing a palette in settings is remembered as a choice", async () => {
+    const h = createHarness();
+    await setTheme(h, "dusk");
+    expect(await h.core.settings()).toMatchObject({ theme: "dusk", themeChosen: true });
   });
 });

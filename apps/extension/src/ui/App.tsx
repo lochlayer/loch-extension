@@ -8,7 +8,7 @@ import { useEffect, useState } from "preact/hooks";
 
 import { displaySol } from "../shared/amounts.js";
 import { mainnetTestingEnabled } from "../shared/build.js";
-import { activityDelta, activityMeta, activityTitle, clockText, doneSentence, isPublicActivity, shortAddress } from "../shared/copy.js";
+import { activityDelta, activityMeta, activityTitle, clockText, doneSentence, HOME_ACTIONS, HOME_COPY, isPublicActivity, shortAddress, WELCOME_COPY } from "../shared/copy.js";
 import type { ActivityEntry, PublicBalanceReply, Snapshot, SyncView } from "../shared/view.js";
 import type { Api } from "./api.js";
 import { FlowSheet, FormSheet, type FormKind, WalletsSheet } from "./flows.js";
@@ -63,7 +63,8 @@ export function CautionBand({ snapshot }: { snapshot: Snapshot | null }) {
 function Brand() {
   return (
     <span class="brand brand--sm">
-      <img src="icons/mascot.svg" width="24" height="24" alt="" />
+      <img class="mark--dusk" src="icons/mascot.svg" width="24" height="24" alt="" />
+      <img class="mark--night" src="icons/mascot-night.svg" width="24" height="24" alt="" />
       <span class="brand__name">Loch</span>
     </span>
   );
@@ -128,7 +129,7 @@ function SyncStatus({ sync, onSync }: { sync: SyncView; onSync: () => void }) {
   );
 }
 
-/** The public balance and when it was read. It is kept live while Loch is open (App). */
+/** The public balance and when it was read: one quiet line on land. It is kept live while Loch is open (App). */
 function PublicBalance({ snapshot, onRead }: { snapshot: Snapshot; onRead: () => Promise<void> }) {
   const [reading, setReading] = useState(false);
   const read = snapshot.publicBalance !== null;
@@ -140,19 +141,7 @@ function PublicBalance({ snapshot, onRead }: { snapshot: Snapshot; onRead: () =>
   };
   return (
     <div class="balance balance--public">
-      <div class="balance__row">
-        <p class="balance__label">Public balance</p>
-        <button
-          class="link link--quiet fig"
-          type="button"
-          onClick={press}
-          aria-busy={reading ? "true" : undefined}
-          aria-label={read ? `Read ${at ? `at ${clockText(at)}` : "earlier"}. Read the public balance again` : "Read the public balance"}
-          title="Asks your RPC endpoint for this address’s balance now. Loch also reads it every few seconds while it is open. That request names your public address."
-        >
-          {reading ? "Reading" : read ? (at ? `at ${clockText(at)}` : "Read again") : "Read"}
-        </button>
-      </div>
+      <p class="balance__label">{HOME_COPY.public}</p>
       <p class="balance__figure">
         {snapshot.publicBalance === null ? (
           <span class="figure is-public is-unsurveyed" role="img" aria-label="Not read yet" />
@@ -163,24 +152,39 @@ function PublicBalance({ snapshot, onRead }: { snapshot: Snapshot; onRead: () =>
         )}
         <span class="fig-unit">SOL</span>
       </p>
+      <button
+        class="link link--quiet fig"
+        type="button"
+        onClick={press}
+        aria-busy={reading ? "true" : undefined}
+        aria-label={read ? `Read ${at ? `at ${clockText(at)}` : "earlier"}. Read the public balance again` : "Read the public balance"}
+        title="Asks your RPC endpoint for this address’s balance now. Loch also reads it every few seconds while it is open. That request names your public address."
+      >
+        {reading ? "Reading" : read ? (at ? `at ${clockText(at)}` : "Read again") : "Read"}
+      </button>
     </div>
   );
 }
 
-function Land({ snapshot, onWallets, onReport, onReadBalance }: { snapshot: Snapshot; onWallets: () => void; onReport: () => void; onReadBalance: () => Promise<void> }) {
+function Land({ snapshot, onWallets, onReport, onReadBalance, onSettings }: { snapshot: Snapshot; onWallets: () => void; onReport: () => void; onReadBalance: () => Promise<void>; onSettings: () => void }) {
   const wallet = snapshot.wallets.find((item) => item.address === snapshot.active);
   const report = snapshot.scan.report;
   return (
     <>
       <header class="popup__head">
         <Brand />
-        {wallet && (
-          <button class="address-chip" type="button" onClick={onWallets} aria-label={`Connected wallet: ${wallet.walletName}, ${shortAddress(wallet.address)}. Wallets and settings`}>
-            <span class="address-chip__name">{wallet.walletName}</span>
-            <span class="address-chip__text fig">{shortAddress(wallet.address)}</span>
-            <Icon name="chevron" small />
+        <span class="popup__head-end">
+          {wallet && (
+            <button class="address-chip" type="button" onClick={onWallets} aria-label={`Connected wallet: ${wallet.walletName}, ${shortAddress(wallet.address)}. Wallets and settings`}>
+              <span class="address-chip__name">{wallet.walletName}</span>
+              <span class="address-chip__text fig">{shortAddress(wallet.address)}</span>
+              <Icon name="chevron" small />
+            </button>
+          )}
+          <button class="btn btn--quiet btn--icon btn--sm popup__gear" type="button" aria-label={HOME_COPY.settings} title={HOME_COPY.settings} onClick={onSettings}>
+            <Icon name="settings" />
           </button>
-        )}
+        </span>
       </header>
       <div class="popup__public">
         <PublicBalance snapshot={snapshot} onRead={onReadBalance} />
@@ -193,30 +197,20 @@ function Land({ snapshot, onWallets, onReport, onReadBalance }: { snapshot: Snap
           }}
           aria-label={report ? `Privacy score ${report.score} of 100. Open the leak report` : "No leak scan yet. Scan this wallet"}
         >
-          <span class="score__label">Privacy score</span>
+          <span class="score__label">{HOME_COPY.privacy}</span>
           <span class="score__figure">
             {report ? (
               <>
                 <span class="figure is-public">{report.score}</span>
-                <span class="score__of">of 100</span>
-                <span class="score__link">Leak report</span>
+                <span class="score__of">/100</span>
               </>
             ) : (
-              <span class="score__link">Scan this wallet</span>
+              <span class="score__link">{HOME_COPY.scan}</span>
             )}
           </span>
         </a>
       </div>
     </>
-  );
-}
-
-function Legend() {
-  return (
-    <p class="popup__foot legend">
-      <span>Upright is public on-chain.</span>
-      <span class="is-shielded">Italic is shielded.</span>
-    </p>
   );
 }
 
@@ -231,33 +225,22 @@ function Home({ snapshot, api, go, open, toast }: { snapshot: Snapshot; api: Api
   if (!shielded) {
     // The wallet is known and locked: its data is on this device, encrypted.
     return (
-      <>
-        <div class="popup__water water" data-depth="60">
-          <section class="balance balance--shielded" aria-label="Shielded balance">
-            <div class="balance__row">
-              <p class="balance__label">Shielded balance</p>
-            </div>
-            <p class="balance__figure">
-              <span class="sounding is-unsurveyed" role="img" aria-label="Locked" />
-              <span class="fig-unit">{unitOf(snapshot)}</span>
-            </p>
-            <p class="balance__note">Locked. One signature from {wallet?.walletName ?? "your wallet"} unlocks it.</p>
-          </section>
-          <button class="btn btn--primary btn--block" type="button" disabled={busy} onClick={() => wallet && void api.call({ loch: "ui", type: "unlock", address: wallet.address })}>
-            Unlock
-          </button>
-        </div>
-        <section class="popup__deep water" data-depth="120" aria-label="Recent activity">
-          <div class="popup__deep-head">
-            <h2>Recent activity</h2>
+      <div class="popup__water popup__water--home water" data-depth="60">
+        <section class="balance balance--shielded" aria-label="Shielded balance">
+          <div class="balance__row">
+            <p class="balance__label">{HOME_COPY.shielded}</p>
           </div>
-          <div class="empty">
-            <p class="empty__title">Kept encrypted</p>
-            <p>Your balance and activity are stored on this device, encrypted. Unlocking asks your wallet for the same signature as the first time. It moves nothing.</p>
-          </div>
-          <Legend />
+          <p class="balance__figure">
+            <span class="sounding is-unsurveyed" role="img" aria-label="Locked" />
+            <span class="fig-unit">{unitOf(snapshot)}</span>
+          </p>
+          <p class="balance__note">{HOME_COPY.locked(wallet?.walletName ?? "your wallet")}</p>
         </section>
-      </>
+        <button class="btn btn--primary btn--block" type="button" disabled={busy} onClick={() => wallet && void api.call({ loch: "ui", type: "unlock", address: wallet.address })}>
+          Unlock
+        </button>
+        <p class="t-fine home__fine">{HOME_COPY.lockedLine}</p>
+      </div>
     );
   }
 
@@ -265,59 +248,44 @@ function Home({ snapshot, api, go, open, toast }: { snapshot: Snapshot; api: Api
   const empty = balance === 0n && snapshot.activity.length === 0;
   const canSpend = BigInt(shielded.spendable) > 0n;
   const recent = snapshot.activity.slice(0, 4);
+  const note = shielded.settling > 0 ? `${shielded.settling === 1 ? "One transfer is" : `${shielded.settling} transfers are`} still settling.` : balance === 0n ? HOME_COPY.empty : null;
   return (
     <>
-      <div class="popup__water water" data-depth="60">
+      <div class="popup__water popup__water--home water" data-depth="60">
         <section class="balance balance--shielded" aria-label="Shielded balance">
           <div class="balance__row">
-            <p class="balance__label">Shielded balance</p>
+            <p class="balance__label">{HOME_COPY.shielded}</p>
             <SyncStatus sync={snapshot.sync} onSync={sync} />
           </div>
           <p class="balance__figure">
             <Sounding lamports={balance} />
             <span class="fig-unit">{unitOf(snapshot)}</span>
           </p>
-          <div class="balance__row">
-            <p class="balance__note">
-              {shielded.settling > 0
-                ? `${shielded.settling === 1 ? "One transfer is" : `${shielded.settling} transfers are`} still settling.`
-                : balance === 0n
-                  ? "Nothing in the Loch yet."
-                  : "In the Loch. Visible only to you."}
-            </p>
-            {api.popup && (
-              <a
-                class="link link--quiet"
-                href="#receive"
-                onClick={(event) => {
-                  event.preventDefault();
-                  go("receive");
-                }}
-              >
-                Receive
-              </a>
-            )}
-          </div>
+          {note && <p class="balance__note">{note}</p>}
         </section>
-        <div class="popup__actions">
+        <div class="popup__actions popup__actions--four">
           <button class={`btn ${canSpend ? "btn--secondary" : "btn--primary"} btn--stacked`} type="button" disabled={busy} onClick={() => open("dive")}>
             <Icon name="dive" />
-            Dive in
+            {HOME_ACTIONS.dive}
           </button>
-          <button class={`btn ${canSpend ? "btn--primary" : "btn--secondary"} btn--stacked`} type="button" disabled={busy || !canSpend} onClick={() => open("send")}>
+          <button class={`btn ${canSpend ? "btn--primary" : "btn--secondary"} btn--stacked`} type="button" disabled={busy || !canSpend} onClick={() => open("send")} aria-label="Send privately">
             <Icon name="send" />
-            Send privately
+            {HOME_ACTIONS.send}
+          </button>
+          <button class="btn btn--secondary btn--stacked" type="button" onClick={() => go("receive")}>
+            <Icon name="receive" />
+            {HOME_ACTIONS.receive}
           </button>
           <button class="btn btn--secondary btn--stacked" type="button" disabled={busy || !canSpend} onClick={() => open("surface")}>
             <Icon name="surface" />
-            Surface
+            {HOME_ACTIONS.surface}
           </button>
         </div>
       </div>
       {api.popup ? (
-        <section class="popup__deep water" data-depth="120" aria-label="Recent activity">
+        <section class="popup__deep popup__deep--home water" data-depth="120" aria-label="Recent activity">
           <div class="popup__deep-head">
-            <h2>Recent activity</h2>
+            <h2>{HOME_COPY.recent}</h2>
             {!empty && (
               <a
                 href="#activity"
@@ -326,14 +294,14 @@ function Home({ snapshot, api, go, open, toast }: { snapshot: Snapshot; api: Api
                   go("activity");
                 }}
               >
-                All activity
+                {HOME_COPY.all}
               </a>
             )}
           </div>
           {recent.length === 0 ? (
             <div class="empty">
-              <p class="empty__title">No activity yet</p>
-              <p>Dive in to move {mainnetTestingEnabled() ? "SOL" : "test SOL"} from your public wallet into your shielded balance. The deposit is public. What you do after it is not.</p>
+              <p class="empty__title">{HOME_COPY.emptyTitle}</p>
+              <p>{HOME_COPY.emptyLine}</p>
             </div>
           ) : (
             <ul class="activity">
@@ -344,7 +312,6 @@ function Home({ snapshot, api, go, open, toast }: { snapshot: Snapshot; api: Api
               ))}
             </ul>
           )}
-          <Legend />
         </section>
       ) : (
         // Beside the panel there is room to keep the address to receive at in view.
@@ -353,7 +320,6 @@ function Home({ snapshot, api, go, open, toast }: { snapshot: Snapshot; api: Api
             <h2>Receive privately</h2>
           </div>
           <ReceiveBlock snapshot={snapshot} api={api} toast={toast} compact />
-          <Legend />
         </section>
       )}
     </>
@@ -365,33 +331,12 @@ function Welcome({ snapshot, api }: { snapshot: Snapshot; api: Api }) {
   return (
     <div class="popup__view water welcome" data-depth="60">
       <p class="welcome__water">The Loch is not.</p>
-      <p class="t-body">Loch is a shielded balance inside the Solana wallet you already use: no new seed phrase. Dive in with {mainnetTestingEnabled() ? "SOL" : "test SOL"}, send it privately, surface it to any address.</p>
-      <dl class="deflist deflist--kv welcome__status">
-        <div class="deflist__row">
-          <dt>Version</dt>
-          <dd>{snapshot.version}, alpha</dd>
-        </div>
-        <div class="deflist__row">
-          <dt>Network</dt>
-          <dd>{mainnetTestingEnabled() ? "Mainnet" : "Devnet only"}</dd>
-        </div>
-        {mainnetTestingEnabled() ? (
-          <div class="deflist__row">
-            <dt>Cautions</dt>
-            <dd>lochlayer.com, under Cautions</dd>
-          </div>
-        ) : (
-          <div class="deflist__row">
-            <dt>Audit</dt>
-            <dd class="t-caution">Unaudited. Never use real funds.</dd>
-          </div>
-        )}
-      </dl>
+      <p class="t-body welcome__line">{WELCOME_COPY.line}</p>
       <div class="welcome__action">
         <button class="btn btn--primary btn--block" type="button" disabled={busy} onClick={() => void api.call({ loch: "ui", type: "connect" })}>
-          Connect wallet
+          {WELCOME_COPY.connect}
         </button>
-        <p class="t-fine">Loch opens its connect page to reach your wallet, and asks it for one signature. Nothing moves and nothing is spent.</p>
+        <p class="t-fine">{WELCOME_COPY.fine}</p>
       </div>
     </div>
   );
@@ -408,7 +353,7 @@ export function App({ api }: { api: Api }) {
   const [view, setView] = useState<View>("home");
   const [sheet, setSheet] = useState<SheetName | null>(null);
   const [toasts, toast] = useToasts();
-  const theme = snapshot?.settings.theme ?? "dusk";
+  const theme = snapshot?.settings.theme ?? "night";
   const flow = snapshot?.flow ?? null;
 
   useEffect(() => {
@@ -502,7 +447,7 @@ export function App({ api }: { api: Api }) {
   ) : null;
 
   const panel =
-    view === "activity" || (!api.popup && (view === "home" || view === "receive")) ? (
+    view === "activity" || (!api.popup && view === "home") ? (
       <ActivityView snapshot={snapshot} api={api} onClose={api.popup ? () => go("home") : undefined} toast={toast} />
     ) : view === "receive" ? (
       <ReceiveView snapshot={snapshot} api={api} onClose={api.popup ? () => go("home") : undefined} toast={toast} />
@@ -518,7 +463,7 @@ export function App({ api }: { api: Api }) {
         <div class={`popup__land land${hasWallet ? "" : " welcome__land-wrap"}`}>
           <CautionBand snapshot={snapshot} />
           {hasWallet ? (
-            <Land snapshot={snapshot} onWallets={() => setSheet("wallets")} onReport={() => go("report")} onReadBalance={readBalance} />
+            <Land snapshot={snapshot} onWallets={() => setSheet("wallets")} onReport={() => go("report")} onReadBalance={readBalance} onSettings={() => go("settings")} />
           ) : (
             <>
               <header class="popup__head">
@@ -552,7 +497,7 @@ export function App({ api }: { api: Api }) {
       <div class="wide__land land">
         <div class="wide__land-left">
           {hasWallet ? (
-            <Land snapshot={snapshot} onWallets={() => setSheet("wallets")} onReport={() => go("report")} onReadBalance={readBalance} />
+            <Land snapshot={snapshot} onWallets={() => setSheet("wallets")} onReport={() => go("report")} onReadBalance={readBalance} onSettings={() => go("settings")} />
           ) : (
             <>
               <header class="popup__head">

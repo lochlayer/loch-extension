@@ -183,6 +183,7 @@ const design = dirname(require.resolve("@loch/design/package.json"));
 mkdirSync(join(out, "icons"), { recursive: true });
 for (const size of [16, 32, 48, 128]) cpSync(join(design, `mark/icon-${size}.png`), join(out, `icons/icon-${size}.png`));
 cpSync(join(design, "mark/mascot.svg"), join(out, "icons/mascot.svg"));
+cpSync(join(design, "mark/mark-night.svg"), join(out, "icons/mascot-night.svg"));
 
 if (stories) {
   console.log(`\nLoch interface stories -> ${relative(process.cwd(), out)} (not the extension)`);

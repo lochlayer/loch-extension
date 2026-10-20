@@ -1,6 +1,6 @@
 {
   "name": "@loch/extension",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "The Loch browser extension (Manifest V3): a shielded balance inside the Solana wallet you already use.",
   "type": "module",
