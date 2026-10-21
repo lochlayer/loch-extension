@@ -4,9 +4,9 @@
 // end-to-end tests put them behind an HTTP server on 127.0.0.1.
 
 import { ed25519 } from "@noble/curves/ed25519";
-import { PROGRAM_ID, type VerificationKey, buildTransactInstruction, buildTransactTransaction, decodeProof, parseProgramError, transactPublicInputs, verifyProof } from "@loch/sdk";
+import { type AnyTransaction, PROGRAM_ID, type VerificationKey, buildTransactInstruction, buildTransactTransaction, decodeProof, parseProgramError, transactPublicInputs, verifyProof } from "@loch/sdk";
 import { WireError, checkRelayRequest, fromRelayRequest, inspectDepositTransaction, parseScreenTransaction, validateRelayRequest, validateScreenRequest } from "@loch/sdk/wire";
-import { AddressLookupTableAccount, type Keypair, type PublicKey, type VersionedTransaction } from "@solana/web3.js";
+import { AddressLookupTableAccount, type Keypair, type PublicKey } from "@solana/web3.js";
 
 import { clusterOf } from "../../src/shared/constants.js";
 import { type MockChain, POOL_LOOKUP_TABLE, RpcFailure } from "./chain.js";
@@ -139,7 +139,7 @@ export class MockScreener {
   /** The pool's lookup table, which this service advertises and accepts; null: a service without one, as before 0.1.2. */
   lookupTable: PublicKey | null = POOL_LOOKUP_TABLE;
   /** The transactions it co-signed, as sent. */
-  readonly screened: VersionedTransaction[] = [];
+  readonly screened: AnyTransaction[] = [];
 
   constructor(readonly options: ScreenerOptions) {}
 

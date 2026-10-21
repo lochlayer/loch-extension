@@ -25,6 +25,9 @@ const I64_MIN = -(1n << 63n);
 const I64_MAX = (1n << 63n) - 1n;
 const MAX_ENCRYPTED_OUTPUT = 256;
 const MAX_TRANSACTION_BYTES = 1232;
+/** A version 1 transaction (SIMD-0385), which starts with this byte, may be 4,096 bytes. */
+const MAX_TRANSACTION_V1_BYTES = 4096;
+const TRANSACTION_V1_VERSION_BYTE = 129;
 const MAX_COMPUTE_UNITS = 1_400_000;
 const CLUSTERS: readonly WireCluster[] = ["mainnet-beta", "devnet", "testnet", "localnet"];
 
@@ -225,7 +228,8 @@ export function validateRelayerInfo(body: unknown): WireResult<RelayerInfo> {
 export function validateScreenRequest(body: unknown): WireResult<ScreenRequest> {
   return run("invalid_request", () => {
     const o = object(body, "body");
-    const transaction = blob(o.transaction, "transaction", { min: 1, max: MAX_TRANSACTION_BYTES });
+    const transaction = blob(o.transaction, "transaction", { min: 1, max: MAX_TRANSACTION_V1_BYTES });
+    if (base64.decode(transaction)[0] !== TRANSACTION_V1_VERSION_BYTE) blob(transaction, "transaction", { min: 1, max: MAX_TRANSACTION_BYTES });
     return { transaction };
   });
 }

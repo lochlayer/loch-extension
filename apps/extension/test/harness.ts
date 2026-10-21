@@ -6,11 +6,11 @@ import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import { ed25519 } from "@noble/curves/ed25519";
-import { type CircuitInput, type DepthCircuitInput, type Groth16Proof, LIGHTHOUSE_PROGRAM_ID, type Prover } from "@loch/sdk";
+import { type CircuitInput, type DepthCircuitInput, type Groth16Proof, LIGHTHOUSE_PROGRAM_ID, type Prover, deserializeTransaction } from "@loch/sdk";
 import { createNodeDepthProver } from "@loch/sdk/node";
 import { RelayerClient, ScreenerClient } from "@loch/sdk/wire";
 import { scanAddressDetailed } from "@loch/scanner-core";
-import { Keypair, type MessageV0, VersionedTransaction } from "@solana/web3.js";
+import { Keypair, type MessageV0 } from "@solana/web3.js";
 
 import { MockChain } from "../e2e/mock/chain.js";
 import { type HttpReply, MockRelayer, MockScreener } from "../e2e/mock/services.js";
@@ -86,6 +86,8 @@ export class TestWallet {
   lighthouse = false;
   /** Change the deposit's own instruction data before signing: a wallet that rewrites what it was given. */
   rewrite = false;
+  /** Signs version 0 only: the bridge answers "unsupported-version" for v1 without asking it. */
+  legacyOnly = false;
   readonly prompts: BridgeRequest[] = [];
 
   get address(): string {
@@ -95,6 +97,9 @@ export class TestWallet {
   answer(request: BridgeRequest): BridgeAnswer {
     if (request.kind === "wallets") {
       return { ok: true, value: { kind: "wallets", wallets: [{ name: this.name, features: this.features, chains: ["solana:devnet"] }] } };
+    }
+    if (request.kind === "signTransaction" && this.legacyOnly && fromBase64(request.transaction)[0] === 129) {
+      return { ok: false, error: { code: "unsupported-version", message: "the wallet does not sign version 1 transactions" } };
     }
     this.prompts.push(request);
     if ((this.decisions.shift() ?? "approve") === "reject") return { ok: false, error: { code: "rejected", message: "User rejected the request." } };
@@ -108,9 +113,9 @@ export class TestWallet {
         return { ok: true, value: { kind: "signMessage", signature: toBase64(signature) } };
       }
       case "signTransaction": {
-        const transaction = VersionedTransaction.deserialize(fromBase64(request.transaction));
-        if (this.tamper) transaction.message.recentBlockhash = Keypair.generate().publicKey.toBase58();
-        if (this.lighthouse) addAssertion(transaction.message as MessageV0);
+        const transaction = deserializeTransaction(fromBase64(request.transaction));
+        if (this.tamper) (transaction.message as { recentBlockhash: string }).recentBlockhash = Keypair.generate().publicKey.toBase58();
+        if (this.lighthouse) addAssertion(transaction.message as unknown as MessageV0);
         if (this.rewrite) {
           const transact = transaction.message.compiledInstructions.find((instruction) => instruction.data.length > 100)!;
           transact.data = Uint8Array.from(transact.data);

@@ -102,7 +102,14 @@ export async function answerBridgeRequest(request: BridgeRequest, wallets: Stand
 
     const sign = method(wallet, "solana:signTransaction", "signTransaction");
     if (!sign) return failure("unsupported", "the wallet cannot sign transactions without sending them");
-    const outputs = (await sign.call.call(sign.self, { account: owner, transaction: fromBase64(request.transaction), chain: request.chain })) as
+    const transaction = fromBase64(request.transaction);
+    // A version 1 transaction (first byte 129) goes only to a wallet that says it signs them;
+    // otherwise the worker builds the same deposit as version 0 and asks again.
+    const versions = (sign.self as { supportedTransactionVersions?: unknown }).supportedTransactionVersions;
+    if (transaction[0] === 129 && !(Array.isArray(versions) && versions.includes(1))) {
+      return failure("unsupported-version", "the wallet does not sign version 1 transactions");
+    }
+    const outputs = (await sign.call.call(sign.self, { account: owner, transaction, chain: request.chain })) as
       | { signedTransaction?: Uint8Array }[]
       | undefined;
     const signed = outputs?.[0]?.signedTransaction;

@@ -673,6 +673,19 @@ describe("the Wallet Standard on a page", () => {
       ok: false,
       error: { code: "rejected", message: "User rejected the request." },
     });
+    // A version 1 transaction (first byte 129) reaches only a wallet that lists version 1.
+    const v1 = toBase64(Uint8Array.of(129, 1, 0, 0));
+    const before = real.calls.length;
+    expect(await answerBridgeRequest({ kind: "signTransaction", wallet: "Phantom", address, transaction: v1, chain: "solana:devnet" }, [real.wallet])).toMatchObject({
+      ok: false,
+      error: { code: "unsupported-version" },
+    });
+    expect(real.calls.length).toBe(before);
+    const signing = real.features["solana:signTransaction"];
+    const modern = { ...real.wallet, features: { ...real.features, "solana:signTransaction": { ...signing, supportedTransactionVersions: ["legacy", 0, 1] } } };
+    expect(await answerBridgeRequest({ kind: "signTransaction", wallet: "Phantom", address, transaction: v1, chain: "solana:devnet" }, [modern as never])).toMatchObject({ ok: true });
+    const silent = { ...real.wallet, features: { ...real.features, "solana:signTransaction": { ...signing, supportedTransactionVersions: undefined } } };
+    expect(await answerBridgeRequest({ kind: "signTransaction", wallet: "Phantom", address, transaction: v1, chain: "solana:devnet" }, [silent as never])).toMatchObject({ ok: false, error: { code: "unsupported-version" } });
     const broken = { ...real.wallet, features: { ...real.features, "solana:signTransaction": undefined } };
     expect(await answerBridgeRequest({ kind: "signTransaction", wallet: "Phantom", address, transaction: "AAAA", chain: "solana:devnet" }, [broken as never])).toMatchObject({
       ok: false,

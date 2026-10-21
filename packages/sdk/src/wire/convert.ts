@@ -2,10 +2,10 @@
 
 import { base64 } from "@scure/base";
 import { PublicKey } from "@solana/web3.js";
-import type { VersionedTransaction } from "@solana/web3.js";
 
 import { bytesToHex, hexToBytes } from "../bytes.js";
 import type { TransactArgs } from "../codec.js";
+import type { AnyTransaction } from "../transactionV1.js";
 import { type RelayRequest, type ScreenRequest, WireError } from "./types.js";
 
 /** `TransactArgs` (for example `PreparedTransact.args`) to the body of `POST /v1/relay`. */
@@ -55,6 +55,6 @@ export function fromRelayRequest(request: RelayRequest): TransactArgs {
 }
 
 /** A deposit transaction (signed or not) to the body of `POST /v1/screen`. */
-export function toScreenRequest(transaction: VersionedTransaction): ScreenRequest {
+export function toScreenRequest(transaction: AnyTransaction): ScreenRequest {
   return { transaction: base64.encode(transaction.serialize()) };
 }

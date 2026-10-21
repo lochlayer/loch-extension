@@ -31,6 +31,7 @@ import {
   treePda,
   vaultPda,
 } from "../src/index.js";
+import type { AnyTransaction } from "../src/transactionV1.js";
 import {
   MAX_LIGHTHOUSE_INSTRUCTIONS,
   RelayerClient,
@@ -660,7 +661,7 @@ function depositTransaction(options: { args?: TransactArgs; extra?: TransactionI
   return new VersionedTransaction(message);
 }
 
-const reasonOf = (transaction: VersionedTransaction, options: { screener?: PublicKey; programId?: PublicKey } = {}) => {
+const reasonOf = (transaction: AnyTransaction, options: { screener?: PublicKey; programId?: PublicKey } = {}) => {
   const result = inspectDepositTransaction(transaction, { screener: screener.publicKey, ...options });
   if (result.ok) return "accepted";
   expect(result.error.code).toBe("invalid_transaction");

@@ -121,7 +121,7 @@ describe("message shapes", () => {
       { kind: "signMessage", wallet: "Phantom", address: ADDRESS, message: "not-base64" },
       { kind: "signTransaction", wallet: "Phantom", address: ADDRESS, transaction: "", chain: "solana:devnet" },
       { kind: "signTransaction", wallet: "Phantom", address: ADDRESS, transaction: "AAAA", chain: "ethereum:1" },
-      { kind: "signTransaction", wallet: "Phantom", address: ADDRESS, transaction: "A".repeat(2000), chain: "solana:devnet" },
+      { kind: "signTransaction", wallet: "Phantom", address: ADDRESS, transaction: "A".repeat(5468), chain: "solana:devnet" },
       { kind: "exportSeed" },
     ];
     for (const value of bad) expect(parseBridgeRequest(value), JSON.stringify(value)).toBeNull();

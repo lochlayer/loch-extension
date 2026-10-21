@@ -120,7 +120,12 @@ export interface DiveRecord extends FlowBase {
   data?: string;
   /** Commitments of the two notes the deposit creates. */
   outputs?: string[];
-  /** The pool's lookup table the screening service named in its info (base58): the deposit is compiled with it. */
+  /**
+   * The wallet does not sign version 1 transactions (it said so through the bridge): the
+   * deposit is built as version 0, with the lookup table below. Otherwise it is version 1.
+   */
+  legacyTransaction?: boolean;
+  /** The pool's lookup table the screening service named in its info (base58): a version 0 deposit is compiled with it. */
   lookupTable?: string;
   /** The transaction with the screener's signature, waiting for the wallet's. base64. */
   unsigned?: string;

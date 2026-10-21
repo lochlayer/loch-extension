@@ -11,6 +11,8 @@ interface Config {
   secret: string;
   /** Milliseconds a "user" takes to answer a prompt. */
   delay: number;
+  /** Whether the wallet lists version 1 transactions (SIMD-0385) as ones it signs. Default true, as Phantom does. */
+  v1?: boolean;
 }
 
 interface Log {
@@ -41,6 +43,7 @@ const account = Object.freeze({
   features: ["solana:signMessage", "solana:signTransaction", "solana:signAndSendTransaction"],
 });
 let connected = false;
+const versions: readonly ("legacy" | number)[] = config.v1 === false ? ["legacy", 0] : ["legacy", 0, 1];
 const listeners: ((properties: unknown) => void)[] = [];
 
 async function prompt(method: string, payload?: Uint8Array): Promise<void> {
@@ -62,6 +65,20 @@ function compactU16(bytes: Uint8Array, offset: number): [number, number] {
 
 /** Signs a serialised transaction in place of its own signature slot, leaving everything else as it is. */
 function sign(transaction: Uint8Array): Uint8Array {
+  if (transaction[0] === 129) {
+    // Version 1: the header, then the config mask, lifetime and two counts; addresses from byte
+    // 42; the signatures last, over every byte before them.
+    const count = transaction[1]!;
+    const messageEnd = transaction.length - 64 * count;
+    let index = -1;
+    for (let i = 0; i < count; i++) {
+      if (transaction.subarray(42 + 32 * i, 74 + 32 * i).every((byte, at) => byte === publicKey[at])) index = i;
+    }
+    if (index < 0) throw new Error("this wallet is not a signer of that transaction");
+    const signed = Uint8Array.from(transaction);
+    signed.set(ed25519.sign(transaction.subarray(0, messageEnd), secret), messageEnd + 64 * index);
+    return signed;
+  }
   const [count, size] = compactU16(transaction, 0);
   const messageStart = size + count * 64;
   const message = transaction.subarray(messageStart);
@@ -119,7 +136,7 @@ const wallet = {
     },
     "solana:signTransaction": {
       version: "1.0.0",
-      supportedTransactionVersions: ["legacy", 0],
+      supportedTransactionVersions: versions,
       signTransaction: async (...inputs: { account: unknown; transaction: Uint8Array }[]) => {
         const outputs = [];
         for (const input of inputs) {
@@ -132,7 +149,7 @@ const wallet = {
     },
     "solana:signAndSendTransaction": {
       version: "1.0.0",
-      supportedTransactionVersions: ["legacy", 0],
+      supportedTransactionVersions: versions,
       signAndSendTransaction: async (...inputs: { transaction: Uint8Array }[]) => {
         for (const input of inputs) await prompt("signAndSendTransaction", input.transaction);
         return inputs.map(() => ({ signature: new Uint8Array(64) }));

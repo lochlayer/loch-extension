@@ -25,6 +25,8 @@ import {
   configPda,
   decodeProof,
   decodeTransactInstruction,
+  deserializeTransaction,
+  type AnyTransaction,
   nullifierPda,
   transactAccountsProblem,
   transactPublicInputs,
@@ -58,7 +60,7 @@ export interface ChainTransaction {
   logs: string[];
   /** The serialised transaction, as sent. */
   raw: Uint8Array;
-  transaction: VersionedTransaction;
+  transaction: AnyTransaction;
   fee: number;
   preBalances: number[];
   postBalances: number[];
@@ -171,13 +173,14 @@ export class MockChain {
   async process(raw: Uint8Array): Promise<string>;
   async process(raw: Uint8Array, options: { simulate: true }): Promise<Simulation>;
   async process(raw: Uint8Array, options: { simulate?: boolean } = {}): Promise<string | Simulation> {
-    let transaction: VersionedTransaction;
+    let transaction: AnyTransaction;
     try {
-      transaction = VersionedTransaction.deserialize(raw);
+      // Version 1 as the SDK reads it (web3.js can read it but not serialise it to verify).
+      transaction = deserializeTransaction(raw);
     } catch {
       throw new RpcFailure(-32602, "failed to deserialize transaction");
     }
-    const message = transaction.message as MessageV0;
+    const message = transaction.message as unknown as MessageV0;
     // The static keys, then the ones loaded from lookup tables: writable first, then read-only.
     const loaded: { writable: PublicKey[]; readonly: PublicKey[] } = { writable: [], readonly: [] };
     for (const lookup of message.addressTableLookups ?? []) {
@@ -414,7 +417,7 @@ export class MockChain {
         err: null,
         logs: [],
         raw: new Uint8Array(),
-        transaction: undefined as unknown as VersionedTransaction,
+        transaction: undefined as unknown as AnyTransaction,
         fee: 5000,
         preBalances: [],
         postBalances: [],

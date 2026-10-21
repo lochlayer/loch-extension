@@ -3,12 +3,13 @@
 
 import { ed25519 } from "@noble/curves/ed25519";
 import { base64 } from "@scure/base";
-import { type AddressLookupTableAccount, ComputeBudgetProgram, PublicKey, VersionedTransaction } from "@solana/web3.js";
+import { type AddressLookupTableAccount, ComputeBudgetProgram, PublicKey } from "@solana/web3.js";
 
 import { bytesToBigIntLE } from "../bytes.js";
 import type { TransactArgs } from "../codec.js";
 import { LIGHTHOUSE_PROGRAM_ID, PROGRAM_ID } from "../constants.js";
 import { type DecodedTransact, type TransactAccounts, decodeTransactInstruction, transactAccountsProblem } from "../instruction.js";
+import { type AnyTransaction, TransactionV1, deserializeTransaction } from "../transactionV1.js";
 import { type ScreenRequest, type ScreenResponse, WireError, type WireResult } from "./types.js";
 
 /** What a deposit transaction does, as established by {@link inspectDepositTransaction}. */
@@ -25,11 +26,15 @@ export interface DepositInspection {
   args: TransactArgs;
   /** The `transact` accounts by name. */
   accounts: TransactAccounts;
-  /** Value of the SetComputeUnitLimit instruction, or null if there is none. */
+  /** The transaction format: 0, or 1 (SIMD-0385). */
+  version: 0 | 1;
+  /** The compute-unit limit (v0: SetComputeUnitLimit; v1: the message's config), or null if none is set. */
   computeUnitLimit: number | null;
-  /** Value of the SetComputeUnitPrice instruction in micro-lamports, or null. */
+  /** v0 only: the SetComputeUnitPrice instruction's value in micro-lamports, or null. */
   computeUnitPrice: bigint | null;
-  /** Value of the SetLoadedAccountsDataSizeLimit instruction in bytes, or null. */
+  /** v1 only: the total priority fee the message's config asks for, in lamports, or null. */
+  priorityFeeLamports: bigint | null;
+  /** The loaded-account-data limit in bytes (v0: SetLoadedAccountsDataSizeLimit; v1: the config), or null. */
   loadedAccountsDataSizeLimit: number | null;
   /** How many Lighthouse assertion instructions a wallet added. */
   lighthouseInstructions: number;
@@ -91,13 +96,13 @@ const DEPOSIT_ACCOUNT_ROLES: readonly { signer: boolean; writable: boolean }[] =
  *
  * Fails with `invalid_transaction`.
  */
-export function parseScreenTransaction(request: ScreenRequest): WireResult<VersionedTransaction> {
-  const fail = (why: string): WireResult<VersionedTransaction> => ({ ok: false, error: new WireError("invalid_transaction", why, 400) });
+export function parseScreenTransaction(request: ScreenRequest): WireResult<AnyTransaction> {
+  const fail = (why: string): WireResult<AnyTransaction> => ({ ok: false, error: new WireError("invalid_transaction", why, 400) });
   let bytes: Uint8Array;
-  let transaction: VersionedTransaction;
+  let transaction: AnyTransaction;
   try {
     bytes = base64.decode(request.transaction);
-    transaction = VersionedTransaction.deserialize(bytes);
+    transaction = deserializeTransaction(bytes);
   } catch {
     return fail("the transaction could not be deserialised");
   }
@@ -120,7 +125,7 @@ export function parseScreenTransaction(request: ScreenRequest): WireResult<Versi
  * signature authorises the whole message, so any other instruction, or the
  * screener's key in any other role, could spend the screener's own funds.
  *
- * Accepted: a v0 message whose instructions are exactly one `transact` with
+ * Accepted: a v0 or v1 (SIMD-0385) message whose instructions are exactly one `transact` with
  * `ext_amount > 0`, at most one each of SetComputeUnitLimit,
  * SetComputeUnitPrice and SetLoadedAccountsDataSizeLimit, and at most
  * {@link MAX_LIGHTHOUSE_INSTRUCTIONS} instructions of the Lighthouse assertion
@@ -132,7 +137,9 @@ export function parseScreenTransaction(request: ScreenRequest): WireResult<Versi
  * every account is the one the program derives. The message may load
  * accounts from one address lookup table, `options.lookupTable` (the pool's),
  * which must be frozen: its addresses never change, so the accounts inspected
- * here are the accounts that run.
+ * here are the accounts that run. A v1 message has no lookup table; its
+ * compute budget is in the message's config, and the compute budget
+ * instructions above, which v1 runs as no-ops, are only tolerated.
  *
  * The account list and the message header must be those of a deposit too:
  * no account is listed twice (counting the ones loaded from the table), every
@@ -154,7 +161,7 @@ export function parseScreenTransaction(request: ScreenRequest): WireResult<Versi
  * Fails with `invalid_transaction` and a message that says what is wrong.
  */
 export function inspectDepositTransaction(
-  transaction: VersionedTransaction,
+  transaction: AnyTransaction,
   options: InspectDepositOptions,
 ): WireResult<DepositInspection> {
   const programId = options?.programId ?? PROGRAM_ID;
@@ -172,7 +179,9 @@ export function inspectDepositTransaction(
   }
 
   const { message } = transaction;
-  if (message.version !== 0) return fail("the transaction must be version 0");
+  if (message.version !== 0 && message.version !== 1) return fail("the transaction must be version 0 or 1");
+  // A v1 message web3.js parsed cannot be serialised again: v1 is read by `deserializeTransaction`.
+  if (message.version === 1 && !(transaction instanceof TransactionV1)) return fail("a version 1 transaction must be read with deserializeTransaction");
   const lookups = message.addressTableLookups;
   if (lookups.length > 1) return fail("at most one address lookup table is allowed");
   if (lookups.length === 1 && !(table && lookups[0]!.accountKey.equals(table.key))) return fail("the only lookup table allowed is the pool's");
@@ -236,6 +245,15 @@ export function inspectDepositTransaction(
     }
   }
   if (!decoded) return fail("there is no loch_pool instruction");
+  let priorityFeeLamports: bigint | null = null;
+  if (message.version === 1) {
+    // Compute budget instructions do nothing in a v1 transaction: the config is what counts.
+    const config = message.transactionConfig;
+    computeUnitLimit = config.computeUnitLimit;
+    computeUnitPrice = null;
+    loadedAccountsDataSizeLimit = config.loadedAccountsDataSizeLimit;
+    priorityFeeLamports = config.priorityFee === null ? null : BigInt(config.priorityFee);
+  }
 
   const problem = transactAccountsProblem(decoded, programId);
   if (problem) return fail(problem);
@@ -297,8 +315,10 @@ export function inspectDepositTransaction(
       fee: args.extData.fee,
       args,
       accounts,
+      version: message.version,
       computeUnitLimit,
       computeUnitPrice,
+      priorityFeeLamports,
       loadedAccountsDataSizeLimit,
       lighthouseInstructions: lighthouse,
       screenerSignatureIndex: 1,
@@ -321,7 +341,7 @@ export function inspectDepositTransaction(
  * @throws WireError `bad_response` if the response is malformed, the screener
  *   is not a signer of this transaction, or the signature does not verify.
  */
-export function applyScreenerSignature(transaction: VersionedTransaction, response: ScreenResponse): VersionedTransaction {
+export function applyScreenerSignature<T extends AnyTransaction>(transaction: T, response: ScreenResponse): T {
   let screener: PublicKey;
   let signature: Uint8Array;
   try {

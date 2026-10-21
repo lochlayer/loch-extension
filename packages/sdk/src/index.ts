@@ -93,6 +93,8 @@ export { buildTransactInstruction, decodeTransactInstruction, transactAccountsPr
 export type { CompiledInstructionLike, DecodedTransact, TransactAccounts, TransactSigners } from "./instruction.js";
 export { buildTransactTransaction, setLoadedAccountsDataSizeLimit } from "./transaction.js";
 export type { BuildTransactionParams } from "./transaction.js";
+export { MAX_TRANSACTION_V1_SIZE, MessageV1, TRANSACTION_V1_VERSION_BYTE, TransactionV1, buildTransactionV1, deserializeTransaction } from "./transactionV1.js";
+export type { AnyTransaction, BuildTransactionV1Params } from "./transactionV1.js";
 
 export {
   areNullifiersSpent,

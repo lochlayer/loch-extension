@@ -1,5 +1,5 @@
-import { LIGHTHOUSE_PROGRAM_ID, vaultPda } from "@loch/sdk";
-import { Keypair, VersionedTransaction } from "@solana/web3.js";
+import { DEPOSIT_LOADED_ACCOUNTS_DATA_SIZE_LIMIT, LIGHTHOUSE_PROGRAM_ID, TransactionV1, deserializeTransaction, vaultPda } from "@loch/sdk";
+import { Keypair } from "@solana/web3.js";
 import { describe, expect, it } from "vitest";
 
 import type { DiveRecord, SpendRecord, UnlockRecord } from "../src/background/core.js";
@@ -303,13 +303,17 @@ describe("dive in", () => {
     // The wallet is shown the deposit with no signature in it (Phantom warns about one signed
     // before it); the screener's signature is put back before sending.
     const [prompt] = h.wallet.prompts;
-    const shown = VersionedTransaction.deserialize(fromBase64(prompt?.kind === "signTransaction" ? prompt.transaction : ""));
+    const shown = deserializeTransaction(fromBase64(prompt?.kind === "signTransaction" ? prompt.transaction : ""));
     expect(shown.signatures.every((signature) => signature.every((byte) => byte === 0))).toBe(true);
-    // Compiled with the pool's lookup table the screening service named, with the loaded-data
-    // limit Phantom asks for, and simulated before the wallet was asked.
-    expect(shown.message.addressTableLookups.map((lookup) => lookup.accountKey.toBase58())).toEqual([POOL_LOOKUP_TABLE.toBase58()]);
-    expect(shown.message.compiledInstructions.some((instruction) => instruction.data[0] === 4 && instruction.data.length === 5)).toBe(true);
-    expect(shown.serialize().length).toBeLessThan(1_232 - 100);
+    // Version 1 (SIMD-0385), as Phantom asks: no lookup table, the compute budget and the
+    // loaded-data limit in the message, room to spare for the wallet's assertions; and
+    // simulated before the wallet was asked.
+    expect(shown).toBeInstanceOf(TransactionV1);
+    if (!(shown instanceof TransactionV1)) return;
+    expect(shown.message.addressTableLookups).toEqual([]);
+    expect(shown.message.transactionConfig).toMatchObject({ computeUnitLimit: 300_000, loadedAccountsDataSizeLimit: DEPOSIT_LOADED_ACCOUNTS_DATA_SIZE_LIMIT });
+    expect(shown.message.compiledInstructions).toHaveLength(1);
+    expect(shown.serialize().length).toBeLessThan(4_096 - 2_000);
     expect(h.chain.calls.indexOf("simulateTransaction")).toBeGreaterThan(-1);
     expect(h.chain.calls.indexOf("simulateTransaction")).toBeLessThan(h.chain.calls.indexOf("sendTransaction"));
     expect(h.chain.balance(h.wallet.address)).toBe(10n * SOL - 5n * SOL - DEPOSIT_OVERHEAD);
@@ -421,7 +425,28 @@ describe("dive in", () => {
     expect(h.screener.screened).toHaveLength(2);
     const sent = h.chain.transactions.at(-1)!.transaction;
     expect(sent.message.staticAccountKeys.some((key) => key.equals(LIGHTHOUSE_PROGRAM_ID))).toBe(true);
-    expect(sent.message.addressTableLookups).toHaveLength(1);
+    expect(sent.message.version).toBe(1);
+    expect((await shielded(h)).balance).toBe(SOL);
+  });
+
+  it("a wallet that does not sign version 1 gets the same deposit as version 0, with the pool's table", async () => {
+    const h = createHarness();
+    await connect(h);
+    fund(h, 10n * SOL);
+    h.wallet.legacyOnly = true;
+    h.wallet.lighthouse = true;
+    h.wallet.prompts.length = 0;
+    await startDive(h.core, SOL);
+    const flow = (await settle(h)) as DiveRecord;
+    expect(flow.failure).toBeUndefined();
+    expect(flow).toMatchObject({ status: "done", legacyTransaction: true });
+    // Screened as v1, refused by the bridge without a prompt, screened as v0, then co-signed
+    // after the wallet added its assertion.
+    expect(h.screener.screened.map((transaction) => transaction.message.version)).toEqual([1, 0, 0]);
+    expect(h.wallet.prompts.map((prompt) => prompt.kind)).toEqual(["signTransaction"]);
+    const sent = h.chain.transactions.at(-1)!.transaction;
+    expect(sent.message.version).toBe(0);
+    expect(sent.message.addressTableLookups.map((lookup) => lookup.accountKey.toBase58())).toEqual([POOL_LOOKUP_TABLE.toBase58()]);
     expect((await shielded(h)).balance).toBe(SOL);
   });
 

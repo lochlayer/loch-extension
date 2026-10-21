@@ -252,7 +252,7 @@ export interface ScreenerInfo {
 /** Body of `POST /v1/screen`. */
 export interface ScreenRequest {
   /**
-   * base64 of a serialised v0 `VersionedTransaction` whose fee payer is the
+   * base64 of a serialised v0 or v1 (SIMD-0385) transaction whose fee payer is the
    * depositor. Signatures may be all zero, or hold the wallet's. Exactly that transaction: nothing
    * may follow it.
    */

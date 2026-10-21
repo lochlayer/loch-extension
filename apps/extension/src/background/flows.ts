@@ -37,13 +37,17 @@ import {
   LochError,
   PROGRAM_ID,
   WireError,
+  type AnyTransaction,
+  TransactionV1,
   applyScreenerSignature,
   buildTransactInstruction,
   buildTransactTransaction,
+  buildTransactionV1,
   claimKeys,
   createClaimSecret,
   decodeRecipient,
   decodeTransactArgs,
+  deserializeTransaction,
   encodeShieldedAddress,
   encodeTransactArgs,
   fetchPoolConfig,
@@ -485,15 +489,23 @@ async function stepDive(core: Core, flow: DiveRecord): Promise<void> {
       if (!flow.data) throw fail("internal");
       const config = await fetchPoolConfig(chain.connection);
       const instruction = buildTransactInstruction(decodeTransactArgs(fromBase64(flow.data)), { signer: depositor, screener: config.screener });
-      const table = await poolTable(chain, flow.lookupTable);
       const { blockhash, lastValidBlockHeight } = await chain.connection.getLatestBlockhash("confirmed");
-      const transaction = buildTransactTransaction({
-        instruction,
-        payer: depositor,
-        recentBlockhash: blockhash,
-        // With the table, the limits Phantom asks for: the screening service that names it accepts them.
-        ...(table ? { lookupTable: table, loadedAccountsDataSizeLimit: DEPOSIT_LOADED_ACCOUNTS_DATA_SIZE_LIMIT } : {}),
-      });
+      // Version 1 (SIMD-0385), as Phantom asks of a transaction it is to simulate and protect: up
+      // to 4,096 bytes, which leaves the wallet room for its assertions, and the compute budget
+      // in the message. A wallet that does not sign v1 gets version 0 with the pool's table.
+      let transaction: AnyTransaction;
+      if (flow.legacyTransaction) {
+        const table = await poolTable(chain, flow.lookupTable);
+        transaction = buildTransactTransaction({
+          instruction,
+          payer: depositor,
+          recentBlockhash: blockhash,
+          // With the table, the limits Phantom asks for: the screening service that names it accepts them.
+          ...(table ? { lookupTable: table, loadedAccountsDataSizeLimit: DEPOSIT_LOADED_ACCOUNTS_DATA_SIZE_LIMIT } : {}),
+        });
+      } else {
+        transaction = buildTransactionV1({ instructions: [instruction], payer: depositor, recentBlockhash: blockhash, loadedAccountsDataSizeLimit: DEPOSIT_LOADED_ACCOUNTS_DATA_SIZE_LIMIT });
+      }
       delete flow.walletSigned;
       // A deposit that would fail is stopped here, before the wallet is asked (Phantom warns about one).
       await simulateDeposit(chain, transaction, flow);
@@ -511,7 +523,7 @@ async function stepDive(core: Core, flow: DiveRecord): Promise<void> {
       delete flow.signed;
       const cluster = await readCluster(chain.connection);
       await core.enter(flow, "signing");
-      const bare = toBase64(new VersionedTransaction(transaction.message).serialize());
+      const bare = toBase64(unsignedCopy(transaction).serialize());
       await ask(core, flow, { kind: "signTransaction", wallet: flow.walletName, address: flow.address, transaction: bare, chain: chainOf(cluster.cluster) });
       return;
     }
@@ -525,9 +537,9 @@ async function stepDive(core: Core, flow: DiveRecord): Promise<void> {
       // wallet returned, once that is known to be the same deposit with additions only.
       if (!flow.unsigned || !flow.walletSigned) throw fail("internal");
       const config = await fetchPoolConfig(chain.connection);
-      const table = await poolTable(chain, flow.lookupTable);
-      const ours = VersionedTransaction.deserialize(fromBase64(flow.unsigned));
-      const theirs = VersionedTransaction.deserialize(fromBase64(flow.walletSigned));
+      const table = flow.legacyTransaction ? await poolTable(chain, flow.lookupTable) : null;
+      const ours = deserializeTransaction(fromBase64(flow.unsigned));
+      const theirs = deserializeTransaction(fromBase64(flow.walletSigned));
       const problem = walletAdditionsProblem(ours, theirs, config.screener, table);
       if (problem) throw fail("wallet-changed-transaction", { retry: true, detail: problem });
       try {
@@ -667,16 +679,24 @@ function sendFailure(rpcUrl: string, error: unknown): FlowFailure {
 }
 
 async function diveAnswer(core: Core, flow: DiveRecord, answer: BridgeAnswer): Promise<void> {
+  if (!answer.ok && answer.error.code === "unsupported-version" && !flow.legacyTransaction) {
+    // The wallet does not sign version 1: the same deposit as version 0, screened and asked again.
+    flow.legacyTransaction = true;
+    delete flow.unsigned;
+    await core.enter(flow, "screening");
+    return;
+  }
   if (!answer.ok) throw walletFailure(answer);
   if (answer.value.kind !== "signTransaction" || !flow.unsigned) throw fail("wallet-failed", { retry: true });
-  let ours: VersionedTransaction;
-  let theirs: VersionedTransaction;
+  let ours: AnyTransaction;
+  let theirs: AnyTransaction;
   try {
-    ours = VersionedTransaction.deserialize(fromBase64(flow.unsigned));
-    theirs = VersionedTransaction.deserialize(fromBase64(answer.value.signedTransaction));
+    ours = deserializeTransaction(fromBase64(flow.unsigned));
+    theirs = deserializeTransaction(fromBase64(answer.value.signedTransaction));
   } catch {
     throw fail("wallet-changed-transaction", { retry: true });
   }
+  if (ours.message.version !== theirs.message.version) throw fail("wallet-changed-transaction", { retry: true });
   const message = ours.message.serialize();
   const depositor = new PublicKey(flow.address);
   if (!bytesEqual(message, theirs.message.serialize())) {
@@ -736,10 +756,11 @@ async function poolTable(chain: Chain, address: string | undefined): Promise<Add
  * requests a signature. A program error stops the flow before the wallet is asked; an endpoint
  * that does not simulate (or does not answer) does not: sending will tell.
  */
-async function simulateDeposit(chain: Chain, transaction: VersionedTransaction, flow: DiveRecord): Promise<void> {
+async function simulateDeposit(chain: Chain, transaction: AnyTransaction, flow: DiveRecord): Promise<void> {
   let result: Awaited<ReturnType<Connection["simulateTransaction"]>>;
   try {
-    result = await chain.connection.simulateTransaction(transaction, { sigVerify: false, replaceRecentBlockhash: false, commitment: "confirmed" });
+    // web3.js sends whatever `serialize()` returns, so a TransactionV1 goes through as v1.
+    result = await chain.connection.simulateTransaction(transaction as VersionedTransaction, { sigVerify: false, replaceRecentBlockhash: false, commitment: "confirmed" });
   } catch {
     return;
   }
@@ -763,7 +784,8 @@ async function simulateDeposit(chain: Chain, transaction: VersionedTransaction, 
  * same blockhash, fee payer and `transact` call, accounts and arguments byte for byte: the
  * wallet may add assertions and change the compute budget, and nothing else.
  */
-function walletAdditionsProblem(ours: VersionedTransaction, theirs: VersionedTransaction, screener: PublicKey, table: AddressLookupTableAccount | null): string | null {
+function walletAdditionsProblem(ours: AnyTransaction, theirs: AnyTransaction, screener: PublicKey, table: AddressLookupTableAccount | null): string | null {
+  if (theirs.message.version !== ours.message.version) return "the wallet changed the transaction's version";
   if (theirs.message.recentBlockhash !== ours.message.recentBlockhash) return "the wallet changed the blockhash";
   const options = { screener, lookupTable: table };
   const before = inspectDepositTransaction(ours, options);
@@ -779,8 +801,13 @@ function walletAdditionsProblem(ours: VersionedTransaction, theirs: VersionedTra
   return null;
 }
 
+/** The same transaction with every signature slot empty: what the wallet is shown. */
+function unsignedCopy(transaction: AnyTransaction): AnyTransaction {
+  return transaction instanceof TransactionV1 ? new TransactionV1(transaction.message) : new VersionedTransaction(transaction.message);
+}
+
 /** Every required signature is there and verifies over the message. */
-function allSigned(transaction: VersionedTransaction): boolean {
+function allSigned(transaction: AnyTransaction): boolean {
   const message = transaction.message.serialize();
   const signers = transaction.message.staticAccountKeys.slice(0, transaction.message.header.numRequiredSignatures);
   return signers.every((signer, index) => {

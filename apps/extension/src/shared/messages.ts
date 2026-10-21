@@ -24,8 +24,8 @@ import { hasOnlyKeys, isBase58Address, isBase64, isNonEmptyString, isRecord, isS
 
 // ------------------------------------------------------------------ limits
 
-/** A serialised Solana transaction is at most 1232 bytes; base64 of that is 1644 characters. */
-export const MAX_TRANSACTION_B64 = 1644;
+/** A serialised Solana transaction is at most 4,096 bytes (version 1, SIMD-0385); base64 of that is 5,464 characters. */
+export const MAX_TRANSACTION_B64 = 5464;
 /** Messages to sign that the wrapper inspects. Larger ones are passed through unread. */
 export const MAX_MESSAGE_B64 = 16 * 1024;
 export const MAX_WALLETS = 16;
@@ -72,7 +72,8 @@ export type BridgeValue =
   | { kind: "signMessage"; signature: string }
   | { kind: "signTransaction"; signedTransaction: string };
 
-export type BridgeErrorCode = "rejected" | "no-wallet" | "no-account" | "unsupported" | "failed";
+/** "unsupported-version": the wallet does not list version 1 among the transactions it signs. */
+export type BridgeErrorCode = "rejected" | "no-wallet" | "no-account" | "unsupported" | "unsupported-version" | "failed";
 
 export interface BridgeFailure {
   code: BridgeErrorCode;
@@ -82,7 +83,7 @@ export interface BridgeFailure {
 
 export type BridgeAnswer = { ok: true; value: BridgeValue } | { ok: false; error: BridgeFailure };
 
-const BRIDGE_ERROR_CODES: readonly string[] = ["rejected", "no-wallet", "no-account", "unsupported", "failed"];
+const BRIDGE_ERROR_CODES: readonly string[] = ["rejected", "no-wallet", "no-account", "unsupported", "unsupported-version", "failed"];
 const CHAIN_PATTERN = /^solana:(mainnet|devnet|testnet|localnet)$/;
 
 export function parseBridgeRequest(value: unknown): BridgeRequest | null {
