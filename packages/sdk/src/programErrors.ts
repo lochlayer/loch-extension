@@ -24,6 +24,19 @@ const MESSAGES: Record<ProgramErrorName, string> = {
   NotUpgradeAuthority: "initialize: only the program's upgrade authority can initialise the pool",
   TreeNotPairAligned: "the tree holds an odd number of leaves",
   InvalidDestination: "a withdrawal or a fee would be paid to the vault or to an account the pool owns, where it could never be withdrawn",
+  InvalidEncryptedOutputLength: "an encrypted output is neither empty nor 103 bytes",
+  AssetMismatch: "the asset account, the ext data's asset and the amount do not agree",
+  MissingAsset: "a deposit or withdrawal needs its asset account",
+  AssetDepositsDisabled: "deposits of this asset are disabled; withdrawals and transfers still work",
+  InvalidVault: "the vault or the vault authority is not the asset's",
+  InvalidTokenProgram: "not the SPL Token program",
+  InvalidTokenAccount: "not a usable token account",
+  InvalidMint: "not an initialized SPL Token mint",
+  InvalidRouter: "the swap's router is not the pool's",
+  InvalidEscrow: "a swap escrow is not what the swap made of it",
+  SwapInputNotSpent: "the router did not take exactly the swap's input",
+  SwapOutputTooSmall: "the swap returned less than its minimum",
+  InvalidSwap: "malformed swap",
 };
 
 const ANCHOR_LOG = /Error Code: (\w+)\. Error Number: (\d+)\. Error Message: (.*?)\.?$/;
@@ -37,8 +50,8 @@ const EXIT = /^Program ([1-9A-HJ-NP-Za-km-z]{32,44}) (?:success|failed: .*)$/;
 // Anchor logs the name of the instruction it dispatches to.
 const ANCHOR_INSTRUCTION = /^Program log: Instruction: (\w+)$/;
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
-/** The only instruction of loch_pool that creates nullifier records, and nullifier records are all it creates. */
-const TRANSACT = "Transact";
+/** The instructions of loch_pool that create nullifier records (v1, v2, swap), and nullifier records are all they create besides swap escrows. */
+const TRANSACTS = new Set(["Transact", "TransactV2", "SwapV2"]);
 // The transaction error is `{ InsufficientFundsForRent: { account_index } }`; web3.js words it as below.
 const RENT = /InsufficientFundsForRent|insufficient funds for rent/i;
 // `{ InstructionError: [n, "ComputationalBudgetExceeded"] }`, and the log lines of the two runtimes.
@@ -89,6 +102,11 @@ export interface ProgramErrorContext {
   nullifiers?: readonly FieldLike[];
   /** The program the nullifier accounts belong to. Defaults to the devnet program id. */
   programId?: PublicKey;
+  /**
+   * The transaction's nullifier accounts themselves, in place of `nullifiers`:
+   * v2 records live under another seed (`nullifierV2Pda`).
+   */
+  nullifierAccounts?: readonly PublicKey[];
 }
 
 /**
@@ -135,6 +153,9 @@ function inUseOrigin(logs: readonly string[]): { address: string | null; instruc
 function inUseIsNullifier(logs: readonly string[], context: ProgramErrorContext | undefined): boolean | null {
   const origin = inUseOrigin(logs);
   if (!origin) return null;
+  if (origin.address !== null && context?.nullifierAccounts) {
+    return context.nullifierAccounts.some((account) => account.toBase58() === origin.address);
+  }
   if (origin.address !== null && context?.nullifiers) {
     return context.nullifiers.some((nullifier) => {
       try {
@@ -146,7 +167,7 @@ function inUseIsNullifier(logs: readonly string[], context: ProgramErrorContext 
   }
   // Created by a system instruction of the transaction itself, not by a program on its behalf.
   if (origin.topLevel) return false;
-  if (origin.instruction !== null) return origin.instruction === TRANSACT;
+  if (origin.instruction !== null) return TRANSACTS.has(origin.instruction);
   return null;
 }
 

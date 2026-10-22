@@ -6,6 +6,7 @@
 // Both take plain data and return plain data, so they run under test without a browser.
 
 import { AddressError, LochError, PROGRAM_ID, decodeRecipient, fetchPoolConfig, ownedNotes, selectNotes } from "@loch/sdk";
+import { type ShieldedAddressV2, addressIndexOf, decodeAnyRecipient, encodeAddressV2, fetchAssetConfig, fetchPoolConfigV2, ownerOf } from "@loch/sdk/v2";
 import { PublicKey } from "@solana/web3.js";
 
 import { fromLamportString } from "../shared/amounts.js";
@@ -34,6 +35,11 @@ import { checkClaim, startClaim } from "./claimFlow.js";
 import type { Core } from "./core.js";
 import { claimCodeFor, depthProofFor, receiptFor, sourceReportFor, viewingKeyFor } from "./disclose.js";
 import { cancelFlow, chooseWallet, dismissFlow, flowBridgeAnswer, retryFlow, startDive, startSpend, startUnlock } from "./flows.js";
+import { startMove } from "./move.js";
+import { depositCosts } from "./rent.js";
+import { startDiveV2, startSpendV2 } from "./flowsV2.js";
+import { makePaymentCodeV2, payLinkForV2, viewingKeyV2For } from "./paymentCodeV2.js";
+import { KNOWN_ASSETS, NATIVE_MINT, assetMeta } from "../shared/assets.js";
 import { assertAllowedCluster, describeNetworkError, readCluster } from "./network.js";
 import { makePaymentCode, payLinkFor, payeeOf } from "./paymentCode.js";
 import { readPublicBalance } from "./publicBalance.js";
@@ -69,7 +75,10 @@ const UI_TYPES = [
   "viewing-key",
   "depth-proof",
   "surface",
+  "move",
   "consolidate",
+  "swap",
+  "swap-quote",
   "surface-warnings",
   "check-address",
   "payment-code",
@@ -96,10 +105,21 @@ export function parseUiRequest(value: unknown): UiRequest | null {
     case "quote":
       return value.want === "dive" || value.want === "spend" ? { loch: "ui", type: "quote", want: value.want } : null;
     case "dive":
-      return isDecimalString(value.amount) ? { loch: "ui", type: "dive", amount: value.amount } : null;
+      if (!isDecimalString(value.amount) || (value.mint !== undefined && !isBase58Address(value.mint))) return null;
+      return { loch: "ui", type: "dive", amount: value.amount, ...(value.mint !== undefined ? { mint: value.mint } : {}) };
     case "send":
       if (!isString(value.to, 200) || !isDecimalString(value.amount) || !isDecimalString(value.fee)) return null;
-      return { loch: "ui", type: "send", to: value.to, amount: value.amount, fee: value.fee };
+      if ((value.mint !== undefined && !isBase58Address(value.mint)) || (value.pool !== undefined && value.pool !== 1 && value.pool !== 2)) return null;
+      return { loch: "ui", type: "send", to: value.to, amount: value.amount, fee: value.fee, ...(value.mint !== undefined ? { mint: value.mint } : {}), ...(value.pool !== undefined ? { pool: value.pool as 1 | 2 } : {}) };
+    case "swap":
+      if (!isBase58Address(value.from) || !isBase58Address(value.to) || !isDecimalString(value.amount) || !isDecimalString(value.minOut) || !isDecimalString(value.fee)) return null;
+      return { loch: "ui", type: "swap", from: value.from, to: value.to, amount: value.amount, minOut: value.minOut, fee: value.fee };
+    case "swap-quote":
+      if (!isBase58Address(value.from) || !isBase58Address(value.to) || !isDecimalString(value.amount)) return null;
+      return { loch: "ui", type: "swap-quote", from: value.from, to: value.to, amount: value.amount };
+    case "viewing-key":
+      if (value.which !== undefined && value.which !== "v1" && value.which !== "full" && value.which !== "incoming") return null;
+      return { loch: "ui", type: "viewing-key", ...(value.which !== undefined ? { which: value.which } : {}) };
     case "send-claim":
       if (!isDecimalString(value.amount) || !isDecimalString(value.fee)) return null;
       return { loch: "ui", type: "send-claim", amount: value.amount, fee: value.fee };
@@ -117,21 +137,36 @@ export function parseUiRequest(value: unknown): UiRequest | null {
     case "source-report":
       return isNonEmptyString(value.id, 64) ? { loch: "ui", type: value.type, id: value.id } : null;
     case "surface":
-    case "surface-warnings":
+    case "surface-warnings": {
       if (!isBase58Address(value.to) || !isDecimalString(value.amount) || !isDecimalString(value.fee)) return null;
-      return { loch: "ui", type: value.type, to: value.to, amount: value.amount, fee: value.fee };
+      if ((value.mint !== undefined && !isBase58Address(value.mint)) || (value.pool !== undefined && value.pool !== 1 && value.pool !== 2)) return null;
+      const extra = { ...(value.mint !== undefined ? { mint: value.mint } : {}), ...(value.pool !== undefined ? { pool: value.pool as 1 | 2 } : {}) };
+      return value.type === "surface"
+        ? { loch: "ui", type: "surface", to: value.to, amount: value.amount, fee: value.fee, ...extra }
+        : { loch: "ui", type: "surface-warnings", to: value.to, amount: value.amount, fee: value.fee };
+    }
     case "consolidate":
-      return isDecimalString(value.fee) ? { loch: "ui", type: "consolidate", fee: value.fee } : null;
+      if (!isDecimalString(value.fee) || (value.mint !== undefined && !isBase58Address(value.mint)) || (value.pool !== undefined && value.pool !== 1 && value.pool !== 2)) return null;
+      return { loch: "ui", type: "consolidate", fee: value.fee, ...(value.mint !== undefined ? { mint: value.mint } : {}), ...(value.pool !== undefined ? { pool: value.pool as 1 | 2 } : {}) };
     case "check-address":
       if ((value.kind !== "shielded" && value.kind !== "public") || !isString(value.text, 400)) return null;
       return { loch: "ui", type: "check-address", kind: value.kind, text: value.text };
+    case "move":
+      return { loch: "ui", type: "move" };
     case "pay-link":
       return value.action === "show" || value.action === "make" || value.action === "new" ? { loch: "ui", type: "pay-link", action: value.action } : null;
     case "settings":
       return isRecord(value.patch) ? { loch: "ui", type: "settings", patch: value.patch } : null;
-    case "flow-retry":
-      if (value.fee === undefined) return { loch: "ui", type: "flow-retry" };
-      return isDecimalString(value.fee) ? { loch: "ui", type: "flow-retry", fee: value.fee } : null;
+    case "flow-retry": {
+      if (value.fee !== undefined && !isDecimalString(value.fee)) return null;
+      if (value.minOut !== undefined && !isDecimalString(value.minOut)) return null;
+      return {
+        loch: "ui",
+        type: "flow-retry",
+        ...(value.fee === undefined ? {} : { fee: value.fee as string }),
+        ...(value.minOut === undefined ? {} : { minOut: value.minOut as string }),
+      };
+    }
     default:
       return { loch: "ui", type: value.type } as UiRequest;
   }
@@ -199,12 +234,29 @@ export async function handleUi(core: Core, message: unknown): Promise<UiReply> {
       case "quote":
         return ok<Quote>(await quote(core, request.want));
       case "dive":
-        await startDive(core, amountOf(request.amount));
+        // Into the v2 pool when the cluster has it; SOL unless an asset is named.
+        if (request.mint !== undefined || (await hasV2(core))) {
+          if (!(await hasV2(core))) return no("no-v2", "this cluster has no v2 pool");
+          await startDiveV2(core, amountOf(request.amount), request.mint ?? NATIVE_MINT);
+        } else {
+          await startDive(core, amountOf(request.amount));
+        }
         return ok(null);
-      case "send":
-        decodeRecipient(request.to);
-        await startSpend(core, "send", { to: request.to, amount: amountOf(request.amount), fee: fromLamportString(request.fee) });
+      case "send": {
+        // The pool follows the address: a v2 address or payment code is paid from v2, a v1 one from the earlier pool.
+        const recipient = decodeAnyRecipient(request.to);
+        if (recipient.version === 2) {
+          await startSpendV2(core, "send", { to: request.to, amount: amountOf(request.amount), fee: fromLamportString(request.fee), mint: request.mint ?? NATIVE_MINT });
+        } else {
+          await startSpend(core, "send", { to: request.to, amount: amountOf(request.amount), fee: fromLamportString(request.fee) });
+        }
         return ok(null);
+      }
+      case "swap":
+        await startSpendV2(core, "swap", { amount: amountOf(request.amount), fee: fromLamportString(request.fee), mint: request.from, toMint: request.to, minOut: amountOf(request.minOut) });
+        return ok(null);
+      case "swap-quote":
+        return ok<{ amountOut: string }>(await swapQuote(core, request.from, request.to, amountOf(request.amount)));
       case "send-claim":
         await startSpend(core, "send", { amount: amountOf(request.amount), fee: fromLamportString(request.fee), claim: true });
         return ok(null);
@@ -220,31 +272,42 @@ export async function handleUi(core: Core, message: unknown): Promise<UiReply> {
       case "source-report":
         return ok<SourceReportReply>(await sourceReportFor(core, request.id));
       case "viewing-key":
-        return ok<ViewingKeyReply>(await viewingKeyFor(core));
+        return ok<ViewingKeyReply>(request.which === "full" || request.which === "incoming" ? await viewingKeyV2For(core, request.which) : await viewingKeyFor(core));
       case "depth-proof":
         return ok<DepthProofReply>(await depthProofFor(core, amountOf(request.threshold), request.challenge));
       case "surface":
-        await startSpend(core, "surface", { to: new PublicKey(request.to).toBase58(), amount: amountOf(request.amount), fee: fromLamportString(request.fee) });
+        if (request.pool !== 1 && (await hasV2(core))) {
+          await startSpendV2(core, "surface", { to: new PublicKey(request.to).toBase58(), amount: amountOf(request.amount), fee: fromLamportString(request.fee), mint: request.mint ?? NATIVE_MINT });
+        } else {
+          await startSpend(core, "surface", { to: new PublicKey(request.to).toBase58(), amount: amountOf(request.amount), fee: fromLamportString(request.fee) });
+        }
+        return ok(null);
+      case "move":
+        await startMove(core);
         return ok(null);
       case "consolidate":
-        await startSpend(core, "consolidate", { amount: 0n, fee: fromLamportString(request.fee) });
+        if (request.pool !== 1 && (await hasV2(core))) {
+          await startSpendV2(core, "consolidate", { amount: 0n, fee: fromLamportString(request.fee), mint: request.mint ?? NATIVE_MINT });
+        } else {
+          await startSpend(core, "consolidate", { amount: 0n, fee: fromLamportString(request.fee) });
+        }
         return ok(null);
       case "check-address":
         return ok<AddressCheck>(await checkAddress(core, request.kind, request.text));
       case "payment-code": {
-        const reply = await makePaymentCode(core);
+        const reply = (await hasV2(core)) ? await makePaymentCodeV2(core) : await makePaymentCode(core);
         core.changed();
         return ok<PaymentCodeReply>(reply);
       }
       case "pay-link": {
-        const reply = await payLinkFor(core, request.action);
+        const reply = (await hasV2(core)) ? await payLinkForV2(core, request.action) : await payLinkFor(core, request.action);
         if (request.action !== "show") core.changed();
         return ok<PayLinkReply | null>(reply);
       }
       case "surface-warnings":
         return ok<SurfaceWarningView[]>(await warningsForSurface(core, request.to, fromLamportString(request.amount), fromLamportString(request.fee)));
       case "flow-retry":
-        await retryFlow(core, request.fee === undefined ? undefined : fromLamportString(request.fee));
+        await retryFlow(core, request.fee === undefined ? undefined : fromLamportString(request.fee), request.minOut === undefined ? undefined : amountOf(request.minOut));
         return ok(null);
       case "flow-cancel":
         await cancelFlow(core);
@@ -276,6 +339,8 @@ async function quote(core: Core, want: "dive" | "spend"): Promise<Quote> {
   assertAllowedCluster(cluster);
   const result: Quote = { cluster: cluster.cluster, pool: null, relayer: null, screener: null };
   if (want === "dive") {
+    const costs = await depositCosts(chain, settings.rpcUrl);
+    result.deposit = { overhead: costs.overhead.toString(), minimum: costs.minimum.toString() };
     try {
       const config = await fetchPoolConfig(chain.connection);
       result.pool = { maxDeposit: config.maxDeposit.toString(), paused: config.paused };
@@ -288,7 +353,9 @@ async function quote(core: Core, want: "dive" | "spend"): Promise<Quote> {
     } catch (error) {
       result.screenerError = describeNetworkError(settings.screenerUrl, error);
     }
-  } else {
+  }
+  if (await hasV2(core)) result.v2 = await quoteV2(core, cluster.cluster, cluster.genesisHash);
+  if (want === "spend") {
     try {
       const info = await core.env.relayer(settings, chain).info();
       if (info.programId !== PROGRAM_ID.toBase58() || info.genesisHash !== cluster.genesisHash) result.relayerError = "mismatch";
@@ -309,8 +376,9 @@ async function checkAddress(core: Core, kind: "shielded" | "public", raw: string
   if (text.length === 0) return { ok: false, reason: "empty" };
   const active = await core.store.active();
   if (kind === "shielded") {
+    let version: 1 | 2 = 1;
     try {
-      decodeRecipient(text);
+      version = decodeAnyRecipient(text).version;
     } catch (error) {
       if (!(error instanceof AddressError)) return { ok: false, reason: "not-an-address" };
       if (isBase58Address(text)) return { ok: false, reason: "public-address" };
@@ -324,6 +392,13 @@ async function checkAddress(core: Core, kind: "shielded" | "public", raw: string
     }
     const runtime = active ? await core.store.runtime(active).catch(() => null) : null;
     const address = text.toLowerCase();
+    if (version === 2) {
+      // Any of the wallet's own v2 addresses: its diversifier decrypts under the wallet's key and gives its owner.
+      const decoded = decodeAnyRecipient(address).recipient as ShieldedAddressV2 & { secret?: Uint8Array };
+      const own = runtime !== null && addressIndexOf(runtime.v2.keys.dk, decoded.d) !== null && ownerOf(runtime.v2.keys.ownerRoot, decoded.d) === decoded.owner;
+      if (!decoded.secret) return { ok: true, address, own, v2: true };
+      return { ok: true, address, own, code: true, payee: encodeAddressV2({ d: decoded.d, owner: decoded.owner, pk: decoded.pk }), v2: true };
+    }
     const payee = payeeOf(address);
     const own = runtime?.shieldedAddress === payee;
     return payee === address ? { ok: true, address, own } : { ok: true, address, own, code: true, payee };
@@ -475,4 +550,60 @@ export async function handleContent(core: Core, sender: SenderLike, message: Con
     case "dialog-assets":
       return core.env.dialogAssets();
   }
+}
+
+// ------------------------------------------------------------------------ v2
+
+/** Whether the active wallet's cluster has the v2 pool, as the last sync found. */
+async function hasV2(core: Core): Promise<boolean> {
+  const address = await core.store.active();
+  return address !== null && (await core.view(address)).v2 === true;
+}
+
+/**
+ * The v2 pool's assets and the relayer's terms in each. Mints the relayer takes are learnt by
+ * the wallet, so a later sync looks for notes in them too.
+ */
+async function quoteV2(core: Core, cluster: Quote["cluster"], genesisHash: string): Promise<NonNullable<Quote["v2"]>> {
+  const { settings, chain } = await core.chain();
+  const config = await fetchPoolConfigV2(chain.connection);
+  const result: NonNullable<Quote["v2"]> = { paused: config.paused, assets: [], relayer: null };
+  let fees: Record<string, string> = {};
+  try {
+    const info = await core.env.relayerV2(settings, chain).info();
+    if (info.programId !== PROGRAM_ID.toBase58() || info.genesisHash !== genesisHash) result.relayerError = "mismatch";
+    else {
+      fees = info.fees;
+      result.relayer = { fees: info.fees, accountFees: info.accountFees ?? {}, minWithdrawal: info.minWithdrawalLamports, swaps: info.swaps, move: info.move ? { min: info.move.minLamports } : null };
+    }
+  } catch (error) {
+    result.relayerError = describeNetworkError(settings.relayerUrl, error);
+  }
+  const address = await core.store.active();
+  const runtime = address ? await core.store.runtime(address).catch(() => null) : null;
+  const known = KNOWN_ASSETS[cluster].map((asset) => asset.mint);
+  const mints = [...new Set([...known, ...Object.keys(fees), ...(runtime?.v2.mints ?? [])])];
+  if (runtime) {
+    const learnt = Object.keys(fees).filter((mint) => !known.includes(mint) && !runtime.v2.mints.includes(mint));
+    if (learnt.length > 0) {
+      runtime.v2.mints = [...runtime.v2.mints, ...learnt].slice(0, 32);
+      await core.store.saveState(runtime);
+    }
+  }
+  for (const mint of mints) {
+    try {
+      const asset = await fetchAssetConfig(chain.connection, new PublicKey(mint));
+      const meta = assetMeta(cluster, mint, asset.decimals);
+      result.assets.push({ mint, symbol: meta.symbol, decimals: asset.decimals, maxDeposit: asset.maxDeposit.toString(), depositsEnabled: asset.depositsEnabled });
+    } catch {
+      // Not registered in this pool: not offered.
+    }
+  }
+  return result;
+}
+
+async function swapQuote(core: Core, from: string, to: string, amount: bigint): Promise<{ amountOut: string }> {
+  const { settings, chain } = await core.chain();
+  assertAllowedCluster(await readCluster(chain.connection));
+  return core.env.relayerV2(settings, chain).quote({ inputMint: from, outputMint: to, amountIn: amount.toString() });
 }

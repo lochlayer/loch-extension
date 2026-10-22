@@ -52,6 +52,19 @@ describe("parseProgramError", () => {
       NotUpgradeAuthority: 6014,
       TreeNotPairAligned: 6015,
       InvalidDestination: 6016,
+      InvalidEncryptedOutputLength: 6017,
+      AssetMismatch: 6018,
+      MissingAsset: 6019,
+      AssetDepositsDisabled: 6020,
+      InvalidVault: 6021,
+      InvalidTokenProgram: 6022,
+      InvalidTokenAccount: 6023,
+      InvalidMint: 6024,
+      InvalidRouter: 6025,
+      InvalidEscrow: 6026,
+      SwapInputNotSpent: 6027,
+      SwapOutputTooSmall: 6028,
+      InvalidSwap: 6029,
     });
   });
 

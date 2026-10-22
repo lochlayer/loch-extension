@@ -16,5 +16,6 @@
   <symbol id="i-settings" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5h2.75"/><path d="M9.75 6.5h7.75"/><circle cx="7.5" cy="6.5" r="2.25"/><path d="M2.5 13.5h7.75"/><path d="M14.75 13.5h2.75"/><circle cx="12.5" cy="13.5" r="2.25"/></symbol>
   <symbol id="i-shielded" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6h15"/><circle cx="10" cy="12.75" r="3.75" stroke-dasharray="1.9 2.03"/></symbol>
   <symbol id="i-surface" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 13h15"/><path d="M10 17.5v-15"/><path d="M5.5 7L10 2.5 14.5 7"/></symbol>
+  <symbol id="i-swap" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7h12"/><path d="M12.5 4l3 3-3 3"/><path d="M16.5 13h-12" stroke-dasharray="2.4 2.6"/><path d="M7.5 10l-3 3 3 3"/></symbol>
   <symbol id="i-wallet" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 6.5h13v10h-13z"/><path d="M3.5 6.5l10-3v3"/><path d="M13.4 11.5h.1"/></symbol>
 </svg>

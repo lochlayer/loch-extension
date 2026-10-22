@@ -9,10 +9,11 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { type CircuitInput, type DepthCircuitInput, type Groth16Proof, LIGHTHOUSE_PROGRAM_ID, type Prover, deserializeTransaction } from "@loch/sdk";
 import { createNodeDepthProver } from "@loch/sdk/node";
 import { RelayerClient, ScreenerClient } from "@loch/sdk/wire";
+import { type CircuitInputV2, RelayerClientV2 } from "@loch/sdk/v2";
 import { scanAddressDetailed } from "@loch/scanner-core";
 import { Keypair, type MessageV0 } from "@solana/web3.js";
 
-import { MockChain } from "../e2e/mock/chain.js";
+import { MockChain, type MockChainOptions } from "../e2e/mock/chain.js";
 import { type HttpReply, MockRelayer, MockScreener } from "../e2e/mock/services.js";
 import { Core, type Env } from "../src/background/core.js";
 import { type KV, memoryKV } from "../src/background/kv.js";
@@ -160,6 +161,10 @@ export interface HarnessOptions {
   local?: ReturnType<typeof memoryKV>;
   session?: ReturnType<typeof memoryKV>;
   shared?: Pick<Harness, "chain" | "relayer" | "screener" | "wallet" | "clock" | "requests" | "tabs" | "held"> & { nextTab: { id: number } };
+  /** The v2 pool on the mock cluster (SOL registered, plus these assets); without it there is none. */
+  v2?: MockChainOptions["v2"];
+  /** The relayer's v2 fee per asset, by mint. */
+  feesV2?: Map<string, bigint>;
 }
 
 export function createHarness(options: HarnessOptions = {}): Harness {
@@ -167,7 +172,7 @@ export function createHarness(options: HarnessOptions = {}): Harness {
   const session = options.session ?? memoryKV();
   const screenerKey = Keypair.generate();
   const shared = options.shared ?? {
-    chain: new MockChain({ screener: screenerKey.publicKey }),
+    chain: new MockChain({ screener: screenerKey.publicKey, ...(options.v2 ? { v2: options.v2 } : {}) }),
     relayer: undefined as unknown as MockRelayer,
     screener: undefined as unknown as MockScreener,
     wallet: new TestWallet(),
@@ -180,7 +185,7 @@ export function createHarness(options: HarnessOptions = {}): Harness {
   if (!options.shared) {
     const relayerKey = Keypair.generate();
     shared.chain.airdrop(relayerKey.publicKey, 10_000_000_000n);
-    shared.relayer = new MockRelayer({ chain: shared.chain, keypair: relayerKey, feeLamports: 2_500_000n });
+    shared.relayer = new MockRelayer({ chain: shared.chain, keypair: relayerKey, feeLamports: 2_500_000n, ...(options.feesV2 ? { feesV2: options.feesV2 } : {}) });
     shared.screener = new MockScreener({ chain: shared.chain, keypair: screenerKey });
   }
   const { chain, relayer, screener, wallet, clock, requests, tabs, held } = shared;
@@ -214,6 +219,18 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     },
   };
 
+  // v2: the same stand-in, with the nine public signals of the v2 circuit.
+  const proverV2: Prover<CircuitInputV2> = {
+    async prove(input: CircuitInputV2) {
+      proverState.calls++;
+      if (proverState.hang) await new Promise(() => undefined);
+      return {
+        proof: VECTOR.snarkjs.proof,
+        publicSignals: [input.root, input.publicAmount, input.publicAsset, input.extDataHash, ...input.inputNullifier, ...input.outputCommitment].map(String),
+      };
+    },
+  };
+
   const notifications = { count: 0 };
   const harness = {} as Harness;
   const sender = (tabId: number, url = tabs.get(tabId) ?? CONNECT): SenderLike => ({
@@ -240,8 +257,10 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     },
     chain: (settings) => createChain(settings, { transport: (input, init) => harness.transport(input, init), rpcTransport }),
     relayer: (settings, c) => new RelayerClient(settings.relayerUrl, { fetch: (url, init) => c.fetch(url, init), relayTimeoutMs: 0, timeoutMs: 0 }),
+    relayerV2: (settings, c) => new RelayerClientV2(settings.relayerUrl, { fetch: (url, init) => c.fetch(url, init), relayTimeoutMs: 0, timeoutMs: 0 }),
     screener: (settings, c) => new ScreenerClient(settings.screenerUrl, { fetch: (url, init) => c.fetch(url, init), timeoutMs: 0 }),
     prover,
+    proverV2,
     depthProver,
     tabs: {
       create: async ({ url }) => {

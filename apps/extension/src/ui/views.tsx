@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { amountProblemText, exactSol, inputSol, parseAmountInput } from "../shared/amounts.js";
 import { mainnetTestingEnabled } from "../shared/build.js";
 import { CLAIM_PAGE, VERIFY_PAGE } from "../shared/constants.js";
-import { DEPTH_COPY, DOCS_ANCHOR, HOME_COPY, PAY_LINK_COPY, RECEIVE_COPY, SETTINGS_COPY, activityObserver, activityStatusText, depthErrorText, isPublicActivity, shortAddress, verdict, whenText } from "../shared/copy.js";
+import { assetText, DEPTH_COPY, DOCS_ANCHOR, HOME_COPY, PAY_LINK_COPY, RECEIVE_COPY, SETTINGS_COPY, activityObserver, activityStatusText, depthErrorText, isPublicActivity, shortAddress, verdict, whenText } from "../shared/copy.js";
 import { activityCsv } from "../shared/export.js";
 import type { ActivityEntry, ClaimCheck, ClaimCodeReply, DepthProofReply, PayLinkReply, PaymentCodeReply, ReceiptReply, Snapshot, SourceReportReply, ViewingKeyReply } from "../shared/view.js";
 import type { Api } from "./api.js";
@@ -122,17 +122,19 @@ function ActivityDetail({ entry, api, toast }: { entry: ActivityEntry; api: Api;
         {entry.kind !== "consolidate" && (
           <div class="deflist__row">
             <dt>Amount</dt>
-            <dd>
-              <Amount lamports={BigInt(entry.amount)} shielded={shielded} exact /> SOL
-            </dd>
+            <dd class={`fig ${shielded ? "is-shielded" : "is-public"}`}>{assetText(BigInt(entry.amount), entry.mint, true)}</dd>
+          </div>
+        )}
+        {entry.kind === "swap" && entry.amountOut && entry.toMint && (
+          <div class="deflist__row">
+            <dt>Got</dt>
+            <dd class="fig is-shielded">{assetText(BigInt(entry.amountOut), entry.toMint, true)}</dd>
           </div>
         )}
         {entry.fee && (
           <div class="deflist__row">
             <dt>Relayer fee</dt>
-            <dd>
-              <Amount lamports={BigInt(entry.fee)} exact /> SOL
-            </dd>
+            <dd class="fig is-public">{assetText(BigInt(entry.fee), entry.mint, true)}</dd>
           </div>
         )}
         {entry.counterparty && (
@@ -269,7 +271,8 @@ export function ReceiveBlock({ snapshot, api, toast, compact }: { snapshot: Snap
 /** The shielded address with its copy button. */
 function AddressBlock({ snapshot, api, toast, compact }: { snapshot: Snapshot; api: Api; toast: ToastFn; compact?: boolean }) {
   const [copied, setCopied] = useState(false);
-  const address = snapshot.shielded?.address ?? "";
+  // The v2 address where the cluster has the v2 pool: payments to it can be in any asset.
+  const address = snapshot.loch2?.address ?? snapshot.shielded?.address ?? "";
   const copy = () =>
     void api.copy(address).then((ok) => {
       if (ok) {
@@ -394,18 +397,38 @@ function CollectBlock({ api, snapshot }: { api: Api; snapshot: Snapshot }) {
  * The viewing key: shown only when asked for, with what it gives away said first. Nothing is
  * kept here: closing the view forgets it.
  */
-function ViewingKeySection({ api, toast, unlocked }: { api: Api; toast: ToastFn; unlocked: boolean }) {
+function ViewingKeySection({ api, toast, unlocked, v2 }: { api: Api; toast: ToastFn; unlocked: boolean; v2: boolean }) {
   const [key, setKey] = useState<string | null>(null);
+  // With the v2 pool, two keys: one that reads what arrives, one that also sees what was spent.
+  const [which, setWhich] = useState<"incoming" | "full">("incoming");
   const show = async () => {
-    const reply = await api.call<ViewingKeyReply>({ loch: "ui", type: "viewing-key" });
+    const reply = await api.call<ViewingKeyReply>({ loch: "ui", type: "viewing-key", ...(v2 ? { which } : {}) });
     if (reply.ok) setKey(reply.value.key);
     else toast("Unlock the wallet to see its viewing key.", "caution");
   };
   return (
     <section class="settings__page" aria-labelledby="set-viewing">
       <p class="t-small" id="set-viewing">
-        {SETTINGS_COPY.viewingLine}
+        {v2 && which === "full" ? SETTINGS_COPY.viewingFullLine : SETTINGS_COPY.viewingLine}
       </p>
+      {v2 && (
+        <div class="segmented" role="radiogroup" aria-label="Which key">
+          {(["incoming", "full"] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              role="radio"
+              aria-checked={which === item ? "true" : "false"}
+              onClick={() => {
+                setWhich(item);
+                setKey(null);
+              }}
+            >
+              {item === "incoming" ? SETTINGS_COPY.viewingIncoming : SETTINGS_COPY.viewingFull}
+            </button>
+          ))}
+        </div>
+      )}
       <p class="notice notice--inline">
         <Icon name="caution" />
         <span>{SETTINGS_COPY.viewingCaution}</span>
@@ -1038,7 +1061,7 @@ export function SettingsView({ snapshot, api, onClose, toast }: ViewProps & { to
     return (
       <div class="settings">
         <ViewHead title={SETTINGS_COPY.viewing} onClose={back} closeLabel={SETTINGS_COPY.back} />
-        <ViewingKeySection api={api} toast={toast} unlocked={active.unlocked} />
+        <ViewingKeySection api={api} toast={toast} unlocked={active.unlocked} v2={snapshot.loch2 !== null} />
       </div>
     );
   }

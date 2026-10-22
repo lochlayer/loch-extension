@@ -34,7 +34,10 @@ import {
   vaultPda,
   verifyProof,
 } from "@loch/sdk";
+import { ASSOCIATED_TOKEN_PROGRAM_ID, NATIVE_MINT, isV2Data, lookupTableAddressesV2, vaultV2Pda } from "@loch/sdk/v2";
 import { ComputeBudgetProgram, Keypair, type MessageV0, PublicKey, SystemProgram, VersionedTransaction } from "@solana/web3.js";
+
+import { MARKET, type MockAssetV2, MockPoolV2 } from "./poolV2.js";
 
 const ROOT_HISTORY = 64;
 const LEVELS = 20;
@@ -70,6 +73,8 @@ export interface ChainTransaction {
   loaded?: { writable: string[]; readonly: string[] };
   /** Set for history that was written directly (the scanner's fixtures). */
   parsed?: unknown;
+  /** Inner instructions (the v2 pool's event CPI): top-level index, then base58 data. */
+  inner?: { index: number; data: string }[];
 }
 
 export class RpcFailure extends Error {
@@ -90,6 +95,8 @@ export interface Simulation {
 
 /** The pool's address lookup table on this chain: frozen, holding config, tree, vault and the system program. */
 export const POOL_LOOKUP_TABLE = new PublicKey("LochTab1e1111111111111111111111111111111111");
+/** The v2 pool's lookup table, frozen, once `initializeV2` has run. */
+export const POOL_LOOKUP_TABLE_V2 = new PublicKey(new Uint8Array(32).fill(7));
 
 export interface MockChainOptions {
   genesisHash?: string;
@@ -98,6 +105,8 @@ export interface MockChainOptions {
   paused?: boolean;
   /** verification_key.json. Without it every proof is accepted. */
   verificationKey?: VerificationKey;
+  /** The v2 pool: initialised with SOL registered, plus these assets. Omitted, it does not exist. */
+  v2?: { router?: PublicKey; assets?: MockAssetV2[] };
 }
 
 export class MockChain {
@@ -108,6 +117,8 @@ export class MockChain {
   verificationKey: VerificationKey | undefined;
   /** False until `initialize` has run: the pool's accounts do not exist. */
   initialized = true;
+  /** The v2 pool, or null when it is not initialised on this chain. */
+  poolV2: MockPoolV2 | null = null;
 
   readonly lamports = new Map<string, bigint>();
   readonly nullifiers = new Set<string>();
@@ -136,6 +147,18 @@ export class MockChain {
     this.verificationKey = options.verificationKey;
     this.roots[0] = this.tree.root;
     this.lamports.set(vaultPda().toBase58(), RENT_MINIMUM);
+    if (options.v2) this.initializeV2(options.v2);
+  }
+
+  /** `initialize_v2` and `register_asset`: the v2 pool, with SOL and `assets`. */
+  initializeV2(options: NonNullable<MockChainOptions["v2"]>): MockPoolV2 {
+    this.poolV2 = new MockPoolV2(this.screener, options.router ?? Keypair.generate().publicKey);
+    for (const asset of options.assets ?? []) this.poolV2.register(asset);
+    this.lookupTables.set(POOL_LOOKUP_TABLE_V2.toBase58(), lookupTableAddressesV2([...this.poolV2.assets.keys()].map((mint) => new PublicKey(mint))));
+    this.lamports.set(vaultV2Pda(NATIVE_MINT).toBase58(), RENT_MINIMUM);
+    // The other side of every swap: deep enough never to run dry in a test.
+    this.lamports.set(MARKET.toBase58(), 1n << 60n);
+    return this.poolV2;
   }
 
   // ---------------------------------------------------------------- balances
@@ -224,6 +247,8 @@ export class MockChain {
     const self = PROGRAM_ID.toBase58();
     let insertedPair = false;
     const createdNullifiers: string[] = [];
+    const restoreV2 = this.poolV2?.snapshot();
+    const inner: { index: number; data: string }[] = [];
 
     const move = (from: PublicKey, to: PublicKey, amount: bigint) => {
       if (this.balance(from) < amount) throw new ProgramFailure("insufficient lamports", { InstructionError: [message.compiledInstructions.length - 1, { Custom: 1 }] });
@@ -239,7 +264,7 @@ export class MockChain {
 
     this.lamports.set(payer.toBase58(), this.balance(payer) - fee);
     try {
-      for (const instruction of message.compiledInstructions) {
+      for (const [index, instruction] of message.compiledInstructions.entries()) {
         const program = keys[instruction.programIdIndex]!;
         if (program.equals(ComputeBudgetProgram.programId) || program.equals(LIGHTHOUSE_PROGRAM_ID)) {
           // A wallet's assertions hold here: nothing they check is modelled.
@@ -256,7 +281,38 @@ export class MockChain {
           }
           throw new ProgramFailure("unsupported system instruction", { InstructionError: [0, "InvalidInstructionData"] });
         }
+        const v2Context = () => ({
+          keys,
+          signers,
+          accounts: instruction.accountKeyIndexes,
+          data: instruction.data,
+          move,
+          anchor,
+          logs,
+          spent: (address: string) => {
+            logs.push("Program 11111111111111111111111111111111 invoke [2]");
+            logs.push(`Allocate: account Address { address: ${address}, base: None } already in use`);
+            logs.push("Program 11111111111111111111111111111111 failed: custom program error: 0x0");
+            logs.push(`Program ${self} failed: custom program error: 0x0`);
+            return new ProgramFailure("NullifierAlreadySpent", { InstructionError: [index, { Custom: 0 }] });
+          },
+        });
+        if (program.equals(ASSOCIATED_TOKEN_PROGRAM_ID) && this.poolV2) {
+          logs.push(`Program ${program.toBase58()} invoke [1]`);
+          this.poolV2.createAta(v2Context());
+          logs.push(`Program ${program.toBase58()} success`);
+          continue;
+        }
         if (!program.equals(PROGRAM_ID)) throw new ProgramFailure("unknown program", { InstructionError: [0, "IncorrectProgramId"] });
+        if (isV2Data(instruction.data)) {
+          if (!this.poolV2) throw new ProgramFailure("AccountNotInitialized", { InstructionError: [index, { Custom: 3012 }] });
+          logs.push(`Program ${self} invoke [1]`);
+          const event = this.poolV2.run(v2Context());
+          inner.push({ index, data: base58.encode(event) });
+          logs.push(`Program ${self} invoke [2]`, `Program ${self} success`);
+          logs.push(`Program ${self} consumed 400000 of 450000 compute units`, `Program ${self} success`);
+          continue;
+        }
         if (!this.initialized) throw new ProgramFailure("AccountNotInitialized", { InstructionError: [0, { Custom: 3012 }] });
 
         logs.push(`Program ${self} invoke [1]`, "Program log: Instruction: Transact");
@@ -314,6 +370,7 @@ export class MockChain {
         this.lamports.clear();
         for (const [key, value] of before) this.lamports.set(key, value);
         if (insertedPair) this.rollbackLastPair();
+        restoreV2?.();
         return { err: null, logs };
       }
       for (const record of createdNullifiers) this.nullifiers.add(record);
@@ -324,6 +381,7 @@ export class MockChain {
       this.lamports.clear();
       for (const [key, value] of before) this.lamports.set(key, value);
       if (insertedPair) this.rollbackLastPair();
+      restoreV2?.();
       throw new RpcFailure(-32002, `Transaction simulation failed: Error processing Instruction: ${JSON.stringify(error.err)}`, { err: error.err, logs });
     }
 
@@ -341,6 +399,7 @@ export class MockChain {
       postBalances: keys.map((key) => Number(this.balance(key))),
       accounts: keys.map((key) => key.toBase58()),
       loaded: { writable: loaded.writable.map((key) => key.toBase58()), readonly: loaded.readonly.map((key) => key.toBase58()) },
+      ...(inner.length ? { inner } : {}),
     };
     this.transactions.push(record);
     return signature;
@@ -462,6 +521,8 @@ export class MockChain {
     });
     if (this.initialized && address === treePda().toBase58()) return account(this.treeData(), PROGRAM_ID, 10_000_000n);
     if (this.initialized && address === configPda().toBase58()) return account(this.configData(), PROGRAM_ID, 2_000_000n);
+    const v2 = this.poolV2?.accountData(address);
+    if (v2) return account(v2.data, v2.owner, v2.lamports);
     const table = this.lookupTables.get(address);
     if (table) {
       // 56 bytes of metadata (type 1, never deactivated, no authority: frozen), then the addresses.
@@ -508,10 +569,19 @@ export class MockChain {
       writableIndexes: lookup.writableIndexes,
       readonlyIndexes: lookup.readonlyIndexes,
     }));
+    const program = all.indexOf(PROGRAM_ID.toBase58());
+    const innerInstructions = (tx.inner ?? []).map(({ index, data }) => ({
+      index,
+      instructions: [
+        encoding === "jsonParsed"
+          ? { programId: PROGRAM_ID.toBase58(), accounts: [], data, stackHeight: 2 }
+          : { programIdIndex: program, accounts: [], data, stackHeight: 2 },
+      ],
+    }));
     const meta = {
       err: tx.err,
       fee: tx.fee,
-      innerInstructions: [],
+      innerInstructions,
       logMessages: tx.logs,
       preBalances: tx.preBalances,
       postBalances: tx.postBalances,

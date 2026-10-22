@@ -6,6 +6,9 @@
 // and notes that were already there when this device first looked.
 
 import type { ReceivedNote } from "@loch/sdk";
+import { type ReceivedNoteV2, noteInner } from "@loch/sdk/v2";
+
+import { isNative } from "../shared/assets.js";
 
 import type { ActivityEntry, ActivityStatus } from "../shared/view.js";
 
@@ -68,4 +71,67 @@ export function entriesForReceived(input: ReceivedInput): ActivityEntry[] {
     amount: note.amount.toString(),
     ...(viaPayLink(note) ? { via: "pay-link" as const } : {}),
   }));
+}
+
+/**
+ * Activity entries for v2 notes a sync found, by the rules of `entriesForReceived`. A note this
+ * device made is no activity of its own: its commitment is among `ownOutputs`, or, for a swap's
+ * output (whose commitment is only known once the swap ran), its inner commitment is, as
+ * `swap:<flow id>:<inner>`; the swap's entry is given the amount it returned instead.
+ */
+export function entriesForReceivedV2(
+  input: Omit<ReceivedInput, "received"> & { received: readonly ReceivedNoteV2[]; activity: readonly ActivityEntry[] },
+): { entries: ActivityEntry[]; activity: ActivityEntry[] } {
+  let activity = [...input.activity];
+  const swaps = new Map<string, string>();
+  for (const item of input.ownOutputs) {
+    const match = /^swap:([^:]+):(\d+)$/.exec(item);
+    if (match) swaps.set(match[2]!, match[1]!);
+  }
+  const foreign: ReceivedNoteV2[] = [];
+  for (const note of input.received) {
+    if (note.amount <= 0n || input.ownOutputs.has(note.commitment.toString())) continue;
+    const flowId = swaps.get(noteInner(note.owner, note.blinding).toString());
+    if (flowId) {
+      activity = activity.map((item) => (item.id === flowId ? { ...item, amountOut: note.amount.toString(), toMint: note.mint.toBase58() } : item));
+      continue;
+    }
+    foreign.push(note);
+  }
+  const mintOf = (note: ReceivedNoteV2) => (isNative(note.mint.toBase58()) ? {} : { mint: note.mint.toBase58() });
+  if (foreign.length === 0) return { entries: [], activity };
+  if (input.firstSync) {
+    const unspent = foreign.filter((note) => !note.spent);
+    // One entry per asset: amounts of different assets do not add up.
+    const byMint = new Map<string, ReceivedNoteV2[]>();
+    for (const note of unspent) byMint.set(note.mint.toBase58(), [...(byMint.get(note.mint.toBase58()) ?? []), note]);
+    const entries = [...byMint.values()].map((notes) => ({
+      id: `restored2-${notes[0]!.leafIndex}`,
+      kind: "restored" as const,
+      status: "confirmed" as const,
+      at: input.now,
+      amount: notes.reduce((sum, note) => sum + note.amount, 0n).toString(),
+      count: notes.length,
+      pool: 2 as const,
+      ...mintOf(notes[0]!),
+    }));
+    return { entries, activity };
+  }
+  const viaPayLink = (note: ReceivedNoteV2) => input.payLink !== null && input.payLink !== undefined && typeof note.source === "object" && note.source.code === input.payLink;
+  const entries = foreign.map((note) => ({
+    id: `rx2-${note.leafIndex}`,
+    kind: "receive" as const,
+    status: "confirmed" as const,
+    at: arrivedAtV2(note, input.now),
+    amount: note.amount.toString(),
+    pool: 2 as const,
+    ...mintOf(note),
+    ...(viaPayLink(note) ? { via: "pay-link" as const } : {}),
+  }));
+  return { entries, activity };
+}
+
+function arrivedAtV2(note: ReceivedNoteV2, now: number): number {
+  const at = typeof note.blockTime === "number" && Number.isFinite(note.blockTime) ? Math.round(note.blockTime * 1000) : Number.NaN;
+  return at > 1_580_000_000_000 && at <= now ? at : now;
 }

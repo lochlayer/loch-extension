@@ -9,7 +9,10 @@ import type { WalletInfo } from "./messages.js";
 
 // -------------------------------------------------------------------- flows
 
-export type FlowKind = "unlock" | "dive" | "send" | "surface" | "consolidate" | "claim";
+export type FlowKind = "unlock" | "dive" | "send" | "surface" | "consolidate" | "claim" | "swap";
+
+/** The pool a flow or an entry belongs to: 1, the earlier SOL pool; 2, the pool of several assets (docs/v2.md). */
+export type Pool = 1 | 2;
 /** running: the worker is at it. waiting: on the user or their wallet. failed and done are final. */
 export type FlowStatus = "running" | "waiting" | "failed" | "done";
 
@@ -80,6 +83,10 @@ export type FailureCode =
   | "relayer-mismatch"
   | "relayer-unavailable"
   | "relayer-refused"
+  /** The relayer does not pay for moves from the earlier pool. */
+  | "move-unavailable"
+  /** A move needs a version-1 transaction, and this wallet does not sign one. */
+  | "move-wallet"
   /** The relayer answered with a transaction id and the chain shows neither the transfer nor its notes as spent. */
   | "relayer-unconfirmed"
   /** A retry must spend the notes of the earlier attempt, and they do not cover the amount at the fee now asked. */
@@ -100,7 +107,14 @@ export type FailureCode =
   /** The note was already collected: by the recipient, by the payer taking it back, or by anyone who saw the code. */
   | "claim-taken"
   /** The note does not cover the relayer fee of collecting it. */
-  | "claim-too-small";
+  | "claim-too-small"
+  // v2
+  /** The relayer does not take fees in this asset. */
+  | "asset-not-taken"
+  /** The relayer does no swaps, or has no route for this one now. */
+  | "swap-unavailable"
+  /** The market moved: the swap would now return less than the minimum agreed to. */
+  | "price-moved";
 
 export interface StageView {
   label: string;
@@ -115,14 +129,23 @@ export interface FlowView {
   /** When the current step began, milliseconds. The interface counts up from it. */
   stepStartedAt: number;
   createdAt: number;
-  /** Lamports. Absent for unlock and consolidation. */
+  /** Base units of `mint` (lamports for SOL). Absent for unlock and consolidation. */
   amount?: string;
+  /** v2: the pool the flow is in. Absent: 1. */
+  pool?: Pool;
+  /** v2: the asset moved (base58 mint). Absent: SOL. */
+  mint?: string;
+  /** A swap: the asset it returns, and the least it returns (base units of `toMint`). */
+  toMint?: string;
+  minOut?: string;
   /** The relayer fee the user agreed to (send, surface, consolidate). */
   fee?: string;
   /** Shielded address (send) or public address (surface). */
   to?: string;
   /** Send: the payment goes to a claim link, not to an address. */
   claim?: true;
+  /** Surface: a move from the earlier pool into the new one (`to` is this wallet). */
+  move?: true;
   /** The transaction id once there is one. Public. */
   signature?: string;
   failure?: Failure;
@@ -136,6 +159,8 @@ export interface FlowView {
    * notes, so at most one of them can ever land.
    */
   bound: boolean;
+  /** Dive in: what it costs beyond the amount, at the cluster's rent. */
+  overhead?: string;
   /** Unlock and dive in: the page the wallet is asked on (origin and path). Fixed when the flow starts. */
   connectUrl?: string;
   /** Unlock: wallets found on the connect page, to choose from. */
@@ -149,7 +174,7 @@ export interface FlowView {
 
 // ----------------------------------------------------------------- activity
 
-export type ActivityKind = "dive" | "send" | "receive" | "surface" | "consolidate" | "restored" | "claim";
+export type ActivityKind = "dive" | "send" | "receive" | "surface" | "consolidate" | "restored" | "claim" | "swap";
 /** submitted: sent, not seen on chain yet. unknown: it may or may not land. */
 export type ActivityStatus = "submitted" | "confirmed" | "failed" | "unknown";
 
@@ -159,8 +184,15 @@ export interface ActivityEntry {
   status: ActivityStatus;
   /** Milliseconds. */
   at: number;
-  /** Lamports moved, always positive. The kind gives the direction. */
+  /** Base units of `mint` moved (lamports for SOL), always positive. The kind gives the direction. */
   amount: string;
+  /** v2: the asset (base58 mint). Absent: SOL. */
+  mint?: string;
+  /** v2: absent for the earlier pool. */
+  pool?: Pool;
+  /** A swap: what it returned, in `toMint`. */
+  toMint?: string;
+  amountOut?: string;
   /** Relayer fee paid from the shielded balance. */
   fee?: string;
   /** dive: the public address it came from. surface: the destination. send: the shielded address. */
@@ -173,6 +205,8 @@ export interface ActivityEntry {
   claim?: true;
   /** receive: it was paid to this wallet's pay link. */
   via?: "pay-link";
+  /** surface: a move from the earlier pool into the new one, in one transaction. */
+  move?: true;
   /**
    * Only in a snapshot, never stored: this device holds the record of the transaction, so a
    * receipt (send), a source-of-funds report (surface) or the claim code (a send to a claim
@@ -250,6 +284,28 @@ export interface ShieldedView {
   settling: number;
 }
 
+/** One asset of the v2 pool. Amounts are base units of the asset. */
+export interface AssetView {
+  mint: string;
+  symbol: string;
+  decimals: number;
+  balance: string;
+  spendable: string;
+  largestPair: string;
+  notes: number;
+}
+
+/** The v2 pool, for an unlocked wallet on a cluster that has it. */
+export interface Loch2View {
+  /** The main v2 address, to receive with. */
+  address: string;
+  /** SOL first, then the cluster's known assets, then any other asset the wallet holds. */
+  assets: AssetView[];
+  settling: number;
+  /** Still syncing for the first time on this device. */
+  neverSynced: boolean;
+}
+
 export interface Snapshot {
   /** Changes whenever anything below does. */
   revision: number;
@@ -267,7 +323,10 @@ export interface Snapshot {
   publicBalance: string | null;
   /** When `publicBalance` was read, milliseconds. */
   publicBalanceAt: number | null;
+  /** The earlier pool (v1, SOL only). */
   shielded: ShieldedView | null;
+  /** The v2 pool; null while locked, before the cluster is known to have it, or on a cluster without it. */
+  loch2: Loch2View | null;
   sync: SyncView;
   activity: ActivityEntry[];
   flow: FlowView | null;
@@ -280,7 +339,17 @@ export interface Snapshot {
 /** What the pool and the services say right now, for a form to show before anything is proven. */
 export interface Quote {
   cluster: Cluster;
+  /** v2: the pool's assets and the relayer's terms in each, when the cluster has the v2 pool. */
+  v2?: {
+    paused: boolean;
+    /** Registered assets this wallet knows (base units). */
+    assets: { mint: string; symbol: string; decimals: number; maxDeposit: string; depositsEnabled: boolean }[];
+    relayer: { fees: Record<string, string>; accountFees: Record<string, string>; minWithdrawal: string; swaps: boolean; move: { min: string } | null } | null;
+    relayerError?: string;
+  };
   pool: { maxDeposit: string; paused: boolean } | null;
+  /** What a deposit costs beyond its amount (two signatures, two nullifier records) and what an account must hold, at the cluster's rent. */
+  deposit?: { overhead: string; minimum: string };
   relayer: { fee: string; minWithdrawal: string; address: string } | null;
   relayerError?: string;
   screener: { maxDeposit: string; policy: string } | null;
@@ -299,8 +368,13 @@ export type UiRequest =
   | { loch: "ui"; type: "sync" }
   | { loch: "ui"; type: "public-balance" }
   | { loch: "ui"; type: "quote"; want: "dive" | "spend" }
-  | { loch: "ui"; type: "dive"; amount: string }
-  | { loch: "ui"; type: "send"; to: string; amount: string; fee: string }
+  /** v2 flows name their asset (`mint`); `pool: 1` keeps a send or surface in the earlier pool. */
+  | { loch: "ui"; type: "dive"; amount: string; mint?: string }
+  | { loch: "ui"; type: "send"; to: string; amount: string; fee: string; mint?: string; pool?: Pool }
+  /** v2: swap `amount` of `from` for at least `minOut` of `to`, paying the relayer `fee` in `from`. */
+  | { loch: "ui"; type: "swap"; from: string; to: string; amount: string; minOut: string; fee: string }
+  /** v2: what a swap would return now, as the relayer's router says. */
+  | { loch: "ui"; type: "swap-quote"; from: string; to: string; amount: string }
   /** Pays `amount` to a new claim link. The note carries one relayer fee more, for collecting it. */
   | { loch: "ui"; type: "send-claim"; amount: string; fee: string }
   /** What a claim code is worth, before collecting it. */
@@ -313,15 +387,17 @@ export type UiRequest =
   | { loch: "ui"; type: "receipt"; id: string }
   /** A source-of-funds report for a confirmed surface (`id`: the activity entry). */
   | { loch: "ui"; type: "source-report"; id: string }
-  /** The active wallet's viewing key. */
-  | { loch: "ui"; type: "viewing-key" }
+  /** The active wallet's viewing key: the earlier pool's, or v2's full or incoming one. */
+  | { loch: "ui"; type: "viewing-key"; which?: "v1" | "full" | "incoming" }
   /** A depth proof: the active wallet holds at least `threshold` lamports, answering the verifier's `challenge`. */
   | { loch: "ui"; type: "depth-proof"; threshold: string; challenge: string }
-  | { loch: "ui"; type: "surface"; to: string; amount: string; fee: string }
-  | { loch: "ui"; type: "consolidate"; fee: string }
+  | { loch: "ui"; type: "surface"; to: string; amount: string; fee: string; mint?: string; pool?: Pool }
+  /** Moves the earlier pool's two largest notes into the new pool, in one transaction the relayer pays for. */
+  | { loch: "ui"; type: "move" }
+  | { loch: "ui"; type: "consolidate"; fee: string; mint?: string; pool?: Pool }
   | { loch: "ui"; type: "surface-warnings"; to: string; amount: string; fee: string }
   | { loch: "ui"; type: "check-address"; kind: "shielded" | "public"; text: string }
-  /** Makes the active wallet's next payment code. */
+  /** Makes the active wallet's next payment code (v2's when the cluster has the v2 pool). */
   | { loch: "ui"; type: "payment-code" }
   /**
    * The active wallet's pay link. `show`: the one it has, or null. `make`: the one it has, or a
@@ -329,7 +405,8 @@ export type UiRequest =
    */
   | { loch: "ui"; type: "pay-link"; action: "show" | "make" | "new" }
   /** `fee`: the relayer fee the user now agrees to, when the failure was that the fee changed. */
-  | { loch: "ui"; type: "flow-retry"; fee?: string }
+  /** `minOut`: a swap whose price moved, tried again with the same notes at a new minimum. */
+  | { loch: "ui"; type: "flow-retry"; fee?: string; minOut?: string }
   | { loch: "ui"; type: "flow-cancel" }
   | { loch: "ui"; type: "flow-dismiss" }
   | { loch: "ui"; type: "scan-start" }
@@ -344,7 +421,8 @@ export type UiReply<T = unknown> = { ok: true; value: T } | { ok: false; error: 
  * address inside it, which is what the activity list knows the recipient by.
  */
 export type AddressCheck =
-  | { ok: true; address: string; own: boolean; code?: true; payee?: string }
+  /** `v2`: an address or payment code of the v2 pool, paid from v2. */
+  | { ok: true; address: string; own: boolean; code?: true; payee?: string; v2?: true }
   | { ok: false; reason: "empty" | "encoding" | "prefix" | "checksum" | "length" | "unusable" | "public-address" | "shielded-address" | "not-an-address" };
 
 /**

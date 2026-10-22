@@ -1,6 +1,7 @@
 // The service worker. It owns every secret and all state; pages and content scripts only send
 // it messages. This file wires the browser's events to the Core and nothing more.
 
+import { RelayerClientV2 } from "@loch/sdk/v2";
 import { RelayerClient, ScreenerClient } from "@loch/sdk/wire";
 import { scanAddressDetailed } from "@loch/scanner-core";
 
@@ -15,7 +16,7 @@ import { chromeKV } from "./kv.js";
 import { createChain } from "./network.js";
 import { checkOhttp, rpcTransport } from "./ohttp.js";
 import { PROVER_PORT } from "../shared/proverProtocol.js";
-import { acceptProverPort, offscreenDepthProver, offscreenProver } from "./proverProxy.js";
+import { acceptProverPort, offscreenDepthProver, offscreenProver, offscreenProverV2 } from "./proverProxy.js";
 import { handleContent, handleUi } from "./router.js";
 import { resumeScan } from "./scan.js";
 
@@ -48,8 +49,10 @@ const env: Env = {
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   chain: (settings) => createChain(settings, { rpcTransport }),
   relayer: (settings, chain) => new RelayerClient(settings.relayerUrl, { fetch: (url, init) => chain.fetch(url, init) }),
+  relayerV2: (settings, chain) => new RelayerClientV2(settings.relayerUrl, { fetch: (url, init) => chain.fetch(url, init) }),
   screener: (settings, chain) => new ScreenerClient(settings.screenerUrl, { fetch: (url, init) => chain.fetch(url, init) }),
   prover: offscreenProver,
+  proverV2: offscreenProverV2,
   depthProver: offscreenDepthProver,
   tabs: {
     create: async (options) => {

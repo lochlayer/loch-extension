@@ -258,6 +258,7 @@ export function validateScreenerInfo(body: unknown): WireResult<ScreenerInfo> {
       policy: text(o.policy, "policy", 2048),
     };
     if (o.lookupTable !== undefined) info.lookupTable = publicKey(o.lookupTable, "lookupTable");
+    if (o.lookupTableV2 !== undefined) info.lookupTableV2 = publicKey(o.lookupTableV2, "lookupTableV2");
     return info;
   });
 }

@@ -26,6 +26,7 @@
 // one back: every write goes through `live` or `holds` below.
 
 import { type LochKeys, type MerkleTree, type WalletState, createWalletState, deriveKeys, encodeShieldedAddress, parseWalletState, treeFromState } from "@loch/sdk";
+import { type LochKeysV2, type WalletStateV2, createWalletStateV2, deriveKeysV2, encodeAddressV2, mainAddress, parseWalletStateV2, treeFromStateV2 } from "@loch/sdk/v2";
 import { PublicKey } from "@solana/web3.js";
 
 import { fromBase64, toBase64 } from "../shared/bytes.js";
@@ -33,6 +34,7 @@ import { isBase58Address, isBase64, isNonEmptyString, isRecord, isSafeInteger } 
 import type { ActivityEntry, ScanView } from "../shared/view.js";
 import type { KV } from "./kv.js";
 import type { PendingSpend } from "./pending.js";
+import type { PendingSpendV2 } from "./pendingV2.js";
 import { type TxRecord, parseRecords } from "./records.js";
 import { type SealedRecord, VaultError, deriveVaultKey, isSealedRecord, newVaultSalt, open, seal } from "./vault.js";
 
@@ -45,6 +47,23 @@ export interface WalletRecord {
   salt: string;
   /** A sealed constant: opening it proves a signature is the one the vault was made with. */
   check: SealedRecord;
+}
+
+/** The wallet in the v2 pool (docs/v2.md): its own keys, state and spends, beside the v1 ones. */
+export interface PoolV2Runtime {
+  keys: LochKeysV2;
+  /** The main v2 address (`loch1...`, 139 characters). */
+  address: string;
+  state: WalletStateV2;
+  /** Built on first use and replaced by each sync. */
+  tree: MerkleTree | null;
+  /** v2 spends sent from this device that the synced state does not show yet. */
+  pending: PendingSpendV2[];
+  neverSynced: boolean;
+  /** Index of the v2 payment code behind the pay link, or null. */
+  payLink: number | null;
+  /** Mints learnt from relayers beyond the cluster's known assets: notes in them are looked for too. */
+  mints: string[];
 }
 
 /** What an unlocked wallet has in memory. */
@@ -78,6 +97,8 @@ export interface WalletRuntime {
    * before one was made. Saved with the state. Only the index is kept: the code follows from it.
    */
   payLink: number | null;
+  /** The v2 pool. */
+  v2: PoolV2Runtime;
 }
 
 /** How many of its own output commitments a wallet remembers. */
@@ -92,6 +113,36 @@ interface StoredState {
   ownOutputs?: unknown;
   shown?: unknown;
   payLink?: unknown;
+  v2?: { state?: unknown; neverSynced?: unknown; pending?: unknown; payLink?: unknown; mints?: unknown };
+}
+
+/** The v2 half of a runtime, from what was stored (or nothing). A stored state that does not parse is dropped: a sync restores it. */
+function poolV2(keys: LochKeysV2, stored: StoredState["v2"]): PoolV2Runtime {
+  const fresh: PoolV2Runtime = {
+    keys,
+    address: encodeAddressV2(mainAddress(keys)),
+    state: createWalletStateV2(keys),
+    tree: null,
+    pending: [],
+    neverSynced: true,
+    payLink: null,
+    mints: [],
+  };
+  if (!stored) return fresh;
+  try {
+    const state = parseWalletStateV2(stored.state);
+    if (state.ownerRoot !== keys.ownerRoot.toString()) return fresh;
+    return {
+      ...fresh,
+      state,
+      neverSynced: stored.neverSynced === true,
+      pending: Array.isArray(stored.pending) ? (stored.pending as PendingSpendV2[]) : [],
+      payLink: Number.isSafeInteger(stored.payLink) && (stored.payLink as number) >= 0 ? (stored.payLink as number) : null,
+      mints: Array.isArray(stored.mints) ? stored.mints.filter((mint): mint is string => isBase58Address(mint)).slice(0, 32) : [],
+    };
+  } catch {
+    return fresh;
+  }
 }
 
 const CHECK_VALUE = "loch";
@@ -187,6 +238,7 @@ export class Store {
       records: [],
       shown: [],
       payLink: null,
+      v2: poolV2(deriveKeysV2(signature, new PublicKey(address).toBytes()), undefined),
     };
     this.runtimes.set(address, runtime);
     await this.saveState(runtime);
@@ -235,6 +287,7 @@ export class Store {
     let ownOutputs: string[] = [];
     let shown: string[] = [];
     let payLink: number | null = null;
+    let storedV2: StoredState["v2"];
     const storedState = await this.local.get<unknown>(`vault:${address}:state`);
     if (storedState !== undefined) {
       // A state that does not open or does not parse is not kept: a full sync restores it.
@@ -253,6 +306,7 @@ export class Store {
         if (Array.isArray(opened.ownOutputs)) ownOutputs = opened.ownOutputs.filter((item): item is string => typeof item === "string");
         if (Array.isArray(opened.shown)) shown = opened.shown.filter((item): item is string => typeof item === "string");
         if (Number.isSafeInteger(opened.payLink) && (opened.payLink as number) >= 0) payLink = opened.payLink as number;
+        if (isRecord(opened.v2)) storedV2 = opened.v2;
       } catch (error) {
         if (error instanceof VaultError && error.reason === "wrong-key") throw error;
         state = createWalletState(keys);
@@ -277,6 +331,7 @@ export class Store {
       records,
       shown,
       payLink,
+      v2: poolV2(deriveKeysV2(signature, new PublicKey(address).toBytes()), storedV2),
     };
     // Forgotten while this was being read: there is no such wallet any more.
     if (this.forgotten.has(address)) return null;
@@ -292,6 +347,12 @@ export class Store {
     } catch {
       return fallback;
     }
+  }
+
+  /** The tree of a wallet's v2 state, built once and then kept. */
+  treeV2(runtime: WalletRuntime): MerkleTree {
+    runtime.v2.tree ??= treeFromStateV2(runtime.v2.state);
+    return runtime.v2.tree;
   }
 
   /** The tree of a wallet's state, built once and then kept. */
@@ -318,7 +379,16 @@ export class Store {
     // A shown note that has been spent has nothing left to give away.
     const unspent = new Set(runtime.state.notes.filter((note) => !note.spent).map((note) => note.commitment));
     runtime.shown = runtime.shown.filter((commitment) => unspent.has(commitment));
-    const stored: StoredState = { state: runtime.state, neverSynced: runtime.neverSynced, pending: runtime.pending, ownOutputs: runtime.ownOutputs, shown: runtime.shown, payLink: runtime.payLink };
+    const { v2 } = runtime;
+    const stored: StoredState = {
+      state: runtime.state,
+      neverSynced: runtime.neverSynced,
+      pending: runtime.pending,
+      ownOutputs: runtime.ownOutputs,
+      shown: runtime.shown,
+      payLink: runtime.payLink,
+      v2: { state: v2.state, neverSynced: v2.neverSynced, pending: v2.pending, payLink: v2.payLink, mints: v2.mints },
+    };
     return this.write(runtime, "state", stored);
   }
 

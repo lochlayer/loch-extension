@@ -170,7 +170,8 @@ function timeout(value: number | undefined, fallback: number): number {
   return value;
 }
 
-class WireClient {
+/** The transport the clients share. Internal: exported for the v2 clients (`@loch/sdk/v2`). */
+export class WireClient {
   private readonly base: string;
   private readonly fetch: WireFetch;
   private readonly headers: Record<string, string>;

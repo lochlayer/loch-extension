@@ -2,9 +2,11 @@
 
 Loch is a privacy layer for Solana. This is the source of its browser extension: a shielded balance inside the wallet you already use, with no new seed phrase.
 
-- **Dive in:** deposit SOL from your wallet into a shared pool, the Loch.
-- **Send privately:** pay another shielded address. Sender, recipient and amount stay off the public record.
+- **Dive in:** deposit SOL or USDC from your wallet into a shared pool, the Loch.
+- **Send privately:** pay another shielded address. Sender, recipient, amount and token stay off the public record.
+- **Swap:** trade SOL and USDC inside the Loch, through Jupiter, straight into a new shielded note.
 - **Surface:** withdraw to any Solana address.
+- **Move:** bring a balance from the earlier pool into the new one, in one transaction the relayer pays for.
 
 Website: [lochlayer.com](https://lochlayer.com) · Chrome Web Store: [Loch](https://chromewebstore.google.com/detail/loch/cholegglblkeacfdjnnogaohmkogmckf) · Install: [lochlayer.com/install](https://lochlayer.com/install) · Docs: [lochlayer.com/docs](https://lochlayer.com/docs) · Cautions: [lochlayer.com/#cautions](https://lochlayer.com/#cautions) · X: [@lochlayer](https://x.com/lochlayer)
 
@@ -25,7 +27,7 @@ pnpm build:mainnet
 
 The result is `apps/extension/dist-mainnet`. Open `chrome://extensions`, turn on Developer mode, press "Load unpacked" and choose that folder.
 
-The build checks the two prover files against their recorded SHA-256 and stops if they differ. `pnpm build` makes a development build in `apps/extension/dist` instead, which talks to services on your own machine. `pnpm test` runs the unit tests of every package and `pnpm typecheck` checks the types.
+The build checks the prover files against their recorded SHA-256 and stops if they differ. `pnpm build` makes a development build in `apps/extension/dist` instead, which talks to services on your own machine. `pnpm test` runs the unit tests of every package and `pnpm typecheck` checks the types.
 
 ## How it works
 
@@ -38,6 +40,7 @@ The build checks the two prover files against their recorded SHA-256 and stops i
 - **Screening.** A deposit carries the co-signature of a screening service. Withdrawals need no one's permission.
 - **Encrypted notes.** The extension finds your notes by scanning the pool and decrypting with an X25519 key. Notes you keep, and payments to a payment code, are also keyed with a pre-shared secret.
 - **Leak warnings.** The extension can read your wallet's public history and warn before a transfer gives something away.
+- **The new pool (v2).** Since 0.2.0 the same program holds a second pool beside the first: SOL and USDC share one tree of depth 26, every transaction spends two notes and creates three, and the relayer is paid with one of them, a shielded note, so a private transfer does not name its token. Keys are split into a spending key, a nullifier key and viewing keys; every payment code is an address of its own. A swap spends notes of one token, trades through Jupiter inside the program, and puts the result back as a note.
 - **No telemetry.** The extension talks to the RPC endpoint, the relayer and the screening service you see in its settings, and to nothing else.
 
 ## On mainnet
@@ -46,6 +49,7 @@ The build checks the two prover files against their recorded SHA-256 and stops i
 | --- | --- |
 | Program | `Lochn2sJLT2hkqMrx85siFPXa9VUTAAx9EXmkPiJL2j` |
 | Address lookup table | `EUauH5aJhqp3NfahYCQj4PBF5bQgq7TxtkqrsQ6uUt5S` |
+| Address lookup table, new pool | `7Gj7vhypcz6RsJZczujYNW5N1GWdDgCiq4V9hQUP5uUp` |
 | RPC endpoint | `https://rpc.lochlayer.com` |
 | Relayer | `https://relayer-mainnet.lochlayer.com` |
 | Screening service | `https://screener-mainnet.lochlayer.com` |
@@ -60,7 +64,7 @@ The build checks the two prover files against their recorded SHA-256 and stops i
 | `packages/scanner-core` | The leak analysis: what a wallet's public history gives away |
 | `packages/rpc-client` | An RPC client that can send requests through Oblivious HTTP (RFC 9458) |
 | `packages/design` | Styles, fonts, icons and the mark |
-| `circuits/artifacts/devnet` | The prover files the extension ships (`transaction.wasm`, `transaction_final.zkey`), the verification key and their manifest |
+| `circuits/artifacts/devnet` | The prover files the extension ships (the earlier pool's `transaction`, the new pool's `transaction2`, the depth proof's `depth`), their verification keys and manifests |
 
 ## Permissions
 

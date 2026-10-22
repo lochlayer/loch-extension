@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import type { DepthCircuitInput } from "./depth.js";
 import { LochError } from "./errors.js";
 import { type Prover, type VerificationKey, createSnarkjsProver } from "./prover.js";
+import type { CircuitInputV2 } from "./v2/transact.js";
 
 /** `circuits/artifacts/devnet` in this repository, resolved from the package's own location. */
 export const DEVNET_ARTIFACTS_DIR: string = fileURLToPath(new URL("../../../circuits/artifacts/devnet", import.meta.url));
@@ -118,4 +119,27 @@ export async function createNodeDepthProver(options: { dir?: string; singleThrea
 export async function createNodeProver(options: { dir?: string; singleThread?: boolean } = {}): Promise<Prover> {
   const { wasm, zkey } = await loadProverArtifacts(options.dir);
   return createSnarkjsProver({ wasm, zkey, singleThread: options.singleThread });
+}
+
+/**
+ * A prover for the v2 circuit (`circuits/artifacts/devnet/transaction2`), its
+ * files checked against the manifest next to them. Also returns the parsed
+ * verification key, for an off-chain check (a relayer's).
+ */
+export async function createNodeProverV2(options: { dir?: string; singleThread?: boolean } = {}): Promise<Prover<CircuitInputV2> & { verificationKey: VerificationKey }> {
+  const dir = options.dir ?? join(DEVNET_ARTIFACTS_DIR, "transaction2");
+  const names = ["transaction2.wasm", "transaction2_final.zkey", "verification_key.json"] as const;
+  let files: Uint8Array[];
+  let manifest: { files?: Record<string, { sha256?: string }> };
+  try {
+    files = await Promise.all(names.map(async (name) => new Uint8Array(await readFile(join(dir, name)))));
+    manifest = JSON.parse(await readFile(join(dir, "manifest.json"), "utf8"));
+  } catch (cause) {
+    throw new LochError("INVALID_ARGUMENT", `v2 prover artifacts could not be read from ${dir}`, { cause });
+  }
+  names.forEach((name, i) => {
+    if (manifest.files?.[name]?.sha256 !== sha256Hex(files[i]!)) throw new LochError("INVALID_ARGUMENT", `${name} does not match manifest.json in ${dir}`);
+  });
+  const prover = createSnarkjsProver<CircuitInputV2>({ wasm: files[0]!, zkey: files[1]!, singleThread: options.singleThread });
+  return { ...prover, verificationKey: JSON.parse(new TextDecoder().decode(files[2]!)) as VerificationKey };
 }

@@ -7,6 +7,7 @@
 // a request to open that port, which says nothing.
 
 import { type CircuitInput, type DepthCircuitInput, LochError, type ProofResult, type Prover } from "@loch/sdk";
+import type { CircuitInputV2 } from "@loch/sdk/v2";
 
 import { isRecord } from "../shared/guards.js";
 import { OFFSCREEN_TARGET, PROVER_PORT, type ProveAnswer, type ProveReply, type ProveRequest, type ProverCircuit } from "../shared/proverProtocol.js";
@@ -119,4 +120,9 @@ export const offscreenProver: Prover = {
 /** Depth proofs, in the same offscreen document. The witness holds the spending key here too. */
 export const offscreenDepthProver: Prover<DepthCircuitInput> = {
   prove: (input: DepthCircuitInput) => proveOffscreen("depth", input),
+};
+
+/** v2 transactions (docs/v2.md), in the same offscreen document. The witness holds the spending key. */
+export const offscreenProverV2: Prover<CircuitInputV2> = {
+  prove: (input: CircuitInputV2) => proveOffscreen("transaction2", input),
 };

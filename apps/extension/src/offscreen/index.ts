@@ -35,6 +35,7 @@ async function loadArtifact(name: string): Promise<Uint8Array> {
 const FILES: Record<ProverCircuit, [string, string]> = {
   transaction: ["transaction.wasm", "transaction_final.zkey"],
   depth: ["depth.wasm", "depth_final.zkey"],
+  transaction2: ["transaction2.wasm", "transaction2_final.zkey"],
 };
 
 function getProver(circuit: ProverCircuit): Promise<Prover<CircuitInput | DepthCircuitInput>> {
@@ -83,7 +84,7 @@ function connect(): void {
   opened.onMessage.addListener((message: unknown) => {
     if (!isRecord(message) || message.type !== "prove" || typeof message.id !== "number" || !isRecord(message.input)) return;
     // A request from before the depth circuit names none: it is a transaction.
-    const circuit: ProverCircuit = message.circuit === "depth" ? "depth" : "transaction";
+    const circuit: ProverCircuit = message.circuit === "depth" ? "depth" : message.circuit === "transaction2" ? "transaction2" : "transaction";
     const id = message.id;
     busy++;
     clearTimeout(idle);

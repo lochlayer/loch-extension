@@ -5,6 +5,7 @@
 import { shortAddress as designShortAddress } from "@loch/design/numerals";
 
 import { displaySol, exactSol } from "./amounts.js";
+import { type AssetMeta, KNOWN_ASSETS, NATIVE_MINT, formatUnits, isNative } from "./assets.js";
 import { mainnetTestingEnabled } from "./build.js";
 import type { ActivityEntry, Failure, FlowKind, FlowView, StageView } from "./view.js";
 
@@ -53,6 +54,7 @@ export const ACTION_NAME: Record<FlowKind, string> = {
   surface: "Surface",
   consolidate: "Combine notes",
   claim: "Collect",
+  swap: "Swap",
 };
 
 export const ACTION_RUNNING: Record<FlowKind, string> = {
@@ -62,6 +64,7 @@ export const ACTION_RUNNING: Record<FlowKind, string> = {
   surface: "Surfacing",
   consolidate: "Combining notes",
   claim: "Collecting",
+  swap: "Swapping",
 };
 
 const ACTION_BUSY: Record<FlowKind, string> = {
@@ -71,6 +74,7 @@ const ACTION_BUSY: Record<FlowKind, string> = {
   surface: "Surfacing",
   consolidate: "Combining",
   claim: "Collecting",
+  swap: "Swapping",
 };
 
 export function busyLabel(kind: FlowKind, firstTime = false): string {
@@ -84,6 +88,7 @@ export const OBSERVER: Record<Exclude<FlowKind, "unlock">, string> = {
   surface: "the destination, the amount, and that it came out of the Loch. Not which deposit paid for it.",
   consolidate: "a proof and the relayer’s fee. No sender, no recipient, no amount.",
   claim: "a proof and the relayer’s fee. No sender, no recipient, no amount.",
+  swap: "the two assets, both amounts, and that the swap went through the Loch. Not whose notes paid for it.",
 };
 
 // -------------------------------------------------------------------- stages
@@ -110,8 +115,17 @@ const STAGES: Record<FlowKind, { steps: string[]; now: string; done: string }[]>
   surface: [],
   consolidate: [],
   claim: [],
+  swap: [],
 };
 STAGES.surface = STAGES.send;
+/** A move: both proofs, the wallet's signature and the screener's, then the relayer. */
+const MOVE_STAGES = [
+  { steps: ["checking"], now: "Checking", done: "Checked" },
+  { steps: ["proving"], now: "Proving", done: "Proved" },
+  { steps: ["signing", "cosigning"], now: "Signing", done: "Signed" },
+  { steps: ["sending", "confirming"], now: "Confirming", done: "Confirmed" },
+];
+STAGES.swap = STAGES.send;
 STAGES.consolidate = STAGES.send;
 STAGES.claim = STAGES.send;
 
@@ -126,8 +140,8 @@ export interface StageLine {
  * ahead and once it is reached. While the flow is in it, it says what is being done: "Confirmed"
  * may not be read off the line before the chain has confirmed anything.
  */
-export function stageLine(flow: Pick<FlowView, "kind" | "step" | "status">): StageLine {
-  const list = STAGES[flow.kind];
+export function stageLine(flow: Pick<FlowView, "kind" | "step" | "status" | "move">): StageLine {
+  const list = flow.move ? MOVE_STAGES : STAGES[flow.kind];
   const done = flow.status === "done" || flow.step === "done";
   const current = done ? list.length : Math.max(0, list.findIndex((stage) => stage.steps.includes(flow.step)));
   const last = list.length - 1;
@@ -140,8 +154,26 @@ export function stageLine(flow: Pick<FlowView, "kind" | "step" | "status">): Sta
 }
 
 /** One plain sentence saying what is happening now. */
-export function statusSentence(flow: Pick<FlowView, "kind" | "step" | "walletName" | "firstTime">): string {
+export function statusSentence(flow: Pick<FlowView, "kind" | "step" | "walletName" | "firstTime" | "move">): string {
   const wallet = flow.walletName ?? "Your wallet";
+  if (flow.move) {
+    switch (flow.step) {
+      case "checking":
+        return "Checking the network, the relayer and your balance in the earlier pool.";
+      case "proving":
+        return "Generating both proofs on this device. It takes a few seconds.";
+      case "signing":
+        return `${wallet} is asking you to approve the move. Answer it in the wallet’s window. You pay nothing: the relayer pays the network fee.`;
+      case "cosigning":
+        return "The screening service is co-signing the move you approved.";
+      case "sending":
+        return "The relayer has the move. It answers once it has seen the transaction confirmed.";
+      case "confirming":
+        return "The relayer says it is sent. Looking for it on the chain.";
+      default:
+        return "Moved.";
+    }
+  }
   if (flow.kind === "unlock") {
     switch (flow.step) {
       case "opening":
@@ -206,23 +238,43 @@ export function statusSentence(flow: Pick<FlowView, "kind" | "step" | "walletNam
     case "confirming":
       return "The relayer says it is sent. Looking for it on the chain.";
     default:
-      return flow.kind === "send" ? "Sent privately." : flow.kind === "surface" ? "Surfaced." : "Notes combined.";
+      return flow.kind === "send" ? "Sent privately." : flow.kind === "surface" ? "Surfaced." : flow.kind === "swap" ? "Swapped." : "Notes combined.";
   }
 }
 
+/** What is known of an asset by its mint on any cluster: its table entry, or a short name. */
+export function anyAssetMeta(mint: string | undefined): AssetMeta {
+  if (isNative(mint)) return KNOWN_ASSETS.devnet[0]!;
+  for (const list of Object.values(KNOWN_ASSETS)) {
+    const found = list.find((asset) => asset.mint === mint);
+    if (found) return found;
+  }
+  return { mint: mint ?? NATIVE_MINT, symbol: `${(mint ?? "").slice(0, 4)}…`, decimals: 0, maxFee: "0" };
+}
+
+/** An amount of an asset with its symbol: "1.250 SOL", "12.50 USDC". `exact` writes every digit that matters. */
+export function assetText(units: bigint, mint?: string, exact = false): string {
+  if (isNative(mint)) return `${exact ? exactSol(units) : displaySol(units)} SOL`;
+  const meta = anyAssetMeta(mint);
+  return `${formatUnits(units, meta.decimals, exact ? meta.decimals : Math.min(3, meta.decimals))} ${meta.symbol}`;
+}
+
 /** The toast when a flow has finished. The action keeps its name. */
-export function doneSentence(flow: Pick<FlowView, "kind" | "amount" | "to" | "claim" | "fee">): string {
-  const amount = flow.amount ? displaySol(BigInt(flow.amount)) : "";
+export function doneSentence(flow: Pick<FlowView, "kind" | "amount" | "to" | "claim" | "fee" | "mint" | "toMint" | "minOut" | "move">): string {
+  const amount = flow.amount ? assetText(BigInt(flow.amount), flow.mint) : "";
+  if (flow.move) return `Moved. ${amount} is in the new pool.`;
   switch (flow.kind) {
     case "unlock":
       return "Unlocked. Your shielded balance is readable on this device.";
     case "dive":
-      return `Dived in. ${amount} SOL is in the Loch.`;
+      return `Dived in. ${amount} is in the Loch.`;
     case "send":
       if (flow.claim) return "Paid. The claim link is in the activity list: open the payment to copy it.";
-      return `Sent privately. ${amount} SOL is on its way to ${shortAddress(flow.to ?? "")}.`;
+      return `Sent privately. ${amount} is on its way to ${shortAddress(flow.to ?? "")}.`;
     case "surface":
-      return `Surfaced. ${amount} SOL went to ${shortAddress(flow.to ?? "")}.`;
+      return `Surfaced. ${amount} went to ${shortAddress(flow.to ?? "")}.`;
+    case "swap":
+      return `Swapped. ${amount} for at least ${assetText(BigInt(flow.minOut ?? "0"), flow.toMint)}, in the Loch.`;
     case "consolidate":
       return "Notes combined. You can send larger amounts in one transfer now.";
     case "claim":
@@ -244,6 +296,8 @@ export interface FailureCopy {
 
 export interface FailureContext {
   kind: FlowKind;
+  /** v2: the asset of the flow. Figures are then written in it. */
+  mint?: string;
   /** Lamports: the shielded balance as it stands. */
   shielded?: string;
   walletName?: string;
@@ -252,13 +306,35 @@ export interface FailureContext {
   proofKept?: boolean;
 }
 
-const figure = (lamports: string | undefined, exact = true): string => (lamports === undefined ? "?" : exact ? exactSol(BigInt(lamports)) : displaySol(BigInt(lamports)));
+/** The asset the failure being written is about (failureCopy sets it): figures are in its precision. */
+let failureAsset: AssetMeta | null = null;
+const figure = (lamports: string | undefined, exact = true): string => {
+  if (lamports === undefined) return "?";
+  if (failureAsset && !isNative(failureAsset.mint)) return formatUnits(BigInt(lamports), failureAsset.decimals, exact ? failureAsset.decimals : Math.min(3, failureAsset.decimals));
+  return exact ? exactSol(BigInt(lamports)) : displaySol(BigInt(lamports));
+};
 /** A public amount in a sentence (fees, limits, public balances). */
 const sol = (lamports: string | undefined, exact = true): string => pub(figure(lamports, exact));
 /** A shielded amount in a sentence. */
 const hid = (lamports: string | undefined, exact = true): string => shd(figure(lamports, exact));
 
+/**
+ * The words for a failure. For a v2 flow in a token, its figures are written in the token and
+ * named by its symbol: the sentences below say "SOL" after a figure, and that is replaced.
+ */
 export function failureCopy(failure: Failure, context: FailureContext): FailureCopy {
+  failureAsset = context.mint && !isNative(context.mint) ? anyAssetMeta(context.mint) : null;
+  try {
+    const copy = failureCopyIn(failure, context);
+    if (!failureAsset) return copy;
+    const symbol = failureAsset.symbol;
+    return { ...copy, lines: copy.lines.map((line) => line.replace(new RegExp(`(${CLOSE}) SOL`, "g"), `$1 ${symbol}`)) };
+  } finally {
+    failureAsset = null;
+  }
+}
+
+function failureCopyIn(failure: Failure, context: FailureContext): FailureCopy {
   const wallet = context.walletName ?? "the wallet";
   const kept = context.proofKept ? " The proof is kept, so it will not take as long." : "";
   const collect = context.kind === "claim";
@@ -502,6 +578,18 @@ export function failureCopy(failure: Failure, context: FailureContext): FailureC
           : ["It works for a different pool or cluster than the RPC endpoint. Nothing was sent.", "Check the relayer address in settings."],
         settings: true,
       };
+    case "move-unavailable":
+      return {
+        title: "The relayer does not pay for moves",
+        lines: ["A move is free because the relayer pays for it, and this one does not. Nothing was sent.", "Choose a relayer that does in settings, or surface the balance to your wallet and dive it in."],
+        settings: true,
+      };
+    case "move-wallet":
+      return {
+        title: "This wallet cannot sign a move",
+        lines: ["A move carries two proofs and needs a version 1 transaction, which this wallet does not sign. Nothing was sent.", "Surface the balance to your wallet instead, then dive it in."],
+        settings: false,
+      };
     case "relayer-refused":
       return {
         title: "The relayer refused the transaction",
@@ -617,12 +705,31 @@ export function failureCopy(failure: Failure, context: FailureContext): FailureC
         lines: [`The link holds ${hid(failure.amount)} SOL and the relayer asks ${sol(failure.limit)} SOL to collect it.`, "Nothing was collected. Choose another relayer in settings, or leave it."],
         settings: true,
       };
+    case "asset-not-taken":
+      return {
+        title: "The relayer does not take this asset",
+        lines: [`It is paid in the asset it moves, and it does not take this one. ${nothing}`, "Choose another relayer in settings, or use another asset."],
+        settings: true,
+      };
+    case "swap-unavailable":
+      return {
+        title: "No swap right now",
+        lines: [`The relayer does no swaps, or found no route for this one. ${nothing}`, "Try again in a moment, or choose another relayer in settings."],
+        settings: true,
+      };
+    case "price-moved":
+      return {
+        title: "The price moved",
+        lines: [`The swap would now return less than the minimum you agreed to. ${nothing}`, "A new quote swaps the same notes at the new price."],
+        settings: false,
+      };
   }
 }
 
 // ------------------------------------------------------------------ activity
 
-export function activityTitle(entry: Pick<ActivityEntry, "kind" | "claim" | "via">): string {
+export function activityTitle(entry: Pick<ActivityEntry, "kind" | "claim" | "via" | "move">): string {
+  if (entry.move) return "Moved to the new pool";
   switch (entry.kind) {
     case "dive":
       return "Dived in";
@@ -638,6 +745,8 @@ export function activityTitle(entry: Pick<ActivityEntry, "kind" | "claim" | "via
       return "Found in the Loch";
     case "claim":
       return "Collected a claim link";
+    case "swap":
+      return "Swapped";
   }
 }
 
@@ -647,8 +756,10 @@ export function isPublicActivity(entry: Pick<ActivityEntry, "kind">): boolean {
 }
 
 /** The signed amount a row shows: what the shielded balance gained or lost by it, without the fee. */
-export function activityDelta(entry: Pick<ActivityEntry, "kind" | "amount" | "fee">): bigint {
+export function activityDelta(entry: Pick<ActivityEntry, "kind" | "amount" | "fee" | "move">): bigint {
   const amount = BigInt(entry.amount);
+  // A move takes from one pool what it puts into the other: the shielded balance is the same.
+  if (entry.move) return 0n;
   switch (entry.kind) {
     case "dive":
     case "receive":
@@ -676,8 +787,9 @@ export function activityStatusText(entry: Pick<ActivityEntry, "status">): string
 }
 
 /** What an observer of the chain could see of an entry. */
-export function activityObserver(entry: Pick<ActivityEntry, "kind" | "counterparty" | "amount">): string {
-  const amount = `${exactSol(BigInt(entry.amount))} SOL`;
+export function activityObserver(entry: Pick<ActivityEntry, "kind" | "counterparty" | "amount" | "mint" | "toMint" | "amountOut" | "move">): string {
+  const amount = assetText(BigInt(entry.amount), entry.mint, true);
+  if (entry.move) return `An observer sees your address${entry.counterparty ? ` ${shortAddress(entry.counterparty)}` : ""} take ${amount} out of the earlier pool and put it into the new one, in one transaction.`;
   switch (entry.kind) {
     case "dive":
       return `An observer sees your address${entry.counterparty ? ` ${shortAddress(entry.counterparty)}` : ""}, ${amount}, and that it went into the Loch.`;
@@ -693,7 +805,16 @@ export function activityObserver(entry: Pick<ActivityEntry, "kind" | "counterpar
       return "These notes were already in the Loch when this device first looked. An observer sees the transactions that made them, not that they are yours.";
     case "claim":
       return "An observer sees a proof and the relayer’s fee. Nothing in it points to you or to whoever paid.";
+    case "swap":
+      return `An observer sees ${amount}${entry.amountOut && entry.toMint ? ` swapped for ${assetText(BigInt(entry.amountOut), entry.toMint, true)}` : " swapped"} through the Loch. Not whose notes paid for it.`;
   }
+}
+
+/** An entry's amount as the row shows it: the sign, the figure in the entry's asset, its symbol. */
+export function activityAmountText(entry: Pick<ActivityEntry, "kind" | "amount" | "fee" | "mint" | "move">): string {
+  if (entry.move) return assetText(BigInt(entry.amount), entry.mint);
+  const delta = activityDelta(entry);
+  return `${delta < 0n ? "−" : "+"}${assetText(delta < 0n ? -delta : delta, entry.mint)}`;
 }
 
 // ---------------------------------------------------------------------- scan
@@ -742,9 +863,12 @@ export function activityMeta(entry: ActivityEntry, now: number): string {
     case "dive":
       return `From ${shortAddress(entry.counterparty ?? "")}, ${whenText(entry.at, now)}`;
     case "surface":
+      if (entry.move) return `From the earlier pool, ${whenText(entry.at, now)}`;
       return `To ${shortAddress(entry.counterparty ?? "")}, ${whenText(entry.at, now)}`;
     case "restored":
       return `${entry.count ?? 1} ${entry.count === 1 ? "note" : "notes"}, ${whenText(entry.at, now)}`;
+    case "swap":
+      return entry.amountOut && entry.toMint ? `For ${assetText(BigInt(entry.amountOut), entry.toMint)}, ${whenText(entry.at, now)}` : whenText(entry.at, now, true);
     default:
       return whenText(entry.at, now, true);
   }
@@ -831,6 +955,7 @@ export const DOCS_ANCHOR = {
   paymentCode: "quantum",
   claim: "claim",
   depth: "depth",
+  move: "v2",
   viewingKey: "disclosure",
   network: "network",
 } as const;
@@ -851,7 +976,35 @@ export const HOME_COPY = {
 } as const;
 
 /** The labels of the four actions on the home screen. The sheets keep their full names. */
-export const HOME_ACTIONS = { dive: "Dive in", send: "Send", receive: "Receive", surface: "Surface" } as const;
+export const HOME_ACTIONS = { dive: "Dive in", send: "Send", receive: "Receive", surface: "Surface", swap: "Swap" } as const;
+
+/** The earlier pool (v1): SOL from before several assets, still the wallet's, moved with one action. */
+export const EARLIER_COPY = {
+  label: "Earlier pool",
+  move: "Move",
+  title: "Move to the new pool",
+  line: "One transaction takes your balance out of the earlier pool and puts it into the new one. Your wallet approves it and the relayer pays for it: you pay nothing.",
+  observer: "your address and the amount, leaving the earlier pool and entering the new one in the same transaction.",
+  moves: "Moves now",
+  fee: "Fee",
+  free: "None",
+  rest: "Your earlier balance is in more than two notes, and one move takes two. Move again for the rest.",
+  unavailable: "The relayer does not pay for moves. Choose one that does in settings, or surface the balance and dive it in.",
+} as const;
+
+export const SWAP_COPY = {
+  title: "Swap",
+  from: "From",
+  to: "Into",
+  quote: "You get about",
+  minimum: "At least",
+  slippage: "The minimum is 1% under the quote. The swap is refused rather than paid less.",
+  asking: "Asking for a quote",
+  noQuote: "No quote right now",
+  newQuote: "Ask for a new quote",
+  again: (minimum: string) => `Swap for at least ${minimum}`,
+  line: "Inside the Loch: the swap shows both assets and amounts, not whose notes paid for it.",
+} as const;
 
 export const WELCOME_COPY = {
   line: "A shielded balance inside the Solana wallet you already use. No new seed phrase.",
@@ -873,6 +1026,7 @@ export const FORM_COPY = {
   linkLine: "Whoever opens the link first gets it, so send it privately. Until then you can take it back.",
   fee: "Fee",
   collectFee: "Fee to collect",
+  accountFee: (symbol: string) => `If the wallet has no ${symbol} account`,
   networkFee: "Network fee and rent",
   total: "Total",
   enterAmount: "Enter an amount",
@@ -920,6 +1074,9 @@ export const SETTINGS_COPY = {
   advancedNote: "Endpoints, this device, about",
   settingsNote: "Palette, keys, advanced",
   viewingLine: "Whoever holds it sees what this wallet receives. They cannot spend.",
+  viewingFullLine: "Whoever holds it sees what this wallet receives and what it spends: its balance and its history. They cannot spend.",
+  viewingIncoming: "What arrives",
+  viewingFull: "Balance and history",
   viewingCaution: "It cannot be taken back. For one payment, give a receipt instead.",
   depthLine: "Show that you hold at least an amount, and nothing else.",
   sitesLine: "Websites see a wallet named Loch that passes everything on to your wallet, after two checks.",

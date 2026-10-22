@@ -57,6 +57,8 @@ const artifactManifest = JSON.parse(readFileSync(join(artifactsDir, "manifest.js
 const ARTIFACT_SETS = [
   { dir: artifactsDir, manifest: artifactManifest, files: ["transaction.wasm", "transaction_final.zkey"] },
   { dir: join(artifactsDir, "depth"), manifest: JSON.parse(readFileSync(join(artifactsDir, "depth", "manifest.json"), "utf8")), files: ["depth.wasm", "depth_final.zkey"] },
+  // The v2 transaction circuit (docs/v2.md), with its own manifest.
+  { dir: join(artifactsDir, "transaction2"), manifest: JSON.parse(readFileSync(join(artifactsDir, "transaction2", "manifest.json"), "utf8")), files: ["transaction2.wasm", "transaction2_final.zkey"] },
 ];
 const ARTIFACT_FILES = ARTIFACT_SETS.flatMap((set) => set.files);
 const artifacts = {};

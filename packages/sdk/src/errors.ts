@@ -187,6 +187,20 @@ export const PROGRAM_ERROR_NAMES = [
   "NotUpgradeAuthority",
   "TreeNotPairAligned",
   "InvalidDestination",
+  // v2 (docs/v2.md), appended.
+  "InvalidEncryptedOutputLength",
+  "AssetMismatch",
+  "MissingAsset",
+  "AssetDepositsDisabled",
+  "InvalidVault",
+  "InvalidTokenProgram",
+  "InvalidTokenAccount",
+  "InvalidMint",
+  "InvalidRouter",
+  "InvalidEscrow",
+  "SwapInputNotSpent",
+  "SwapOutputTooSmall",
+  "InvalidSwap",
 ] as const;
 
 /** A `loch_pool` error name. */
@@ -195,7 +209,7 @@ export type ProgramErrorName = (typeof PROGRAM_ERROR_NAMES)[number];
 /** First custom error code Anchor assigns to a program's own errors. */
 export const PROGRAM_ERROR_BASE = 6000;
 
-/** `loch_pool` error codes by name (InvalidProof = 6000 ... InvalidDestination = 6016). */
+/** `loch_pool` error codes by name (InvalidProof = 6000 ... InvalidDestination = 6016; v2: 6017 ... InvalidSwap = 6029). */
 export const PROGRAM_ERROR_CODES: Readonly<Record<ProgramErrorName, number>> = Object.freeze(
   Object.fromEntries(PROGRAM_ERROR_NAMES.map((name, i) => [name, PROGRAM_ERROR_BASE + i])) as Record<ProgramErrorName, number>,
 );

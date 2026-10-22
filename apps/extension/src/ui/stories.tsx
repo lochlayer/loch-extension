@@ -113,6 +113,7 @@ const base: Snapshot = {
   publicBalance: "41207400000",
   publicBalanceAt: NOW - 3 * 60_000,
   shielded: { address: SHIELDED, balance: "12480739112", spendable: "12480739112", largestPair: "12480739112", notes: 2, settling: 0 },
+  loch2: null,
   sync: { status: "synced", at: NOW - 3 * 60_000 },
   activity: activity.slice(0, 4),
   flow: null,

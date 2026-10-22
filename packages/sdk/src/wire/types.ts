@@ -44,6 +44,12 @@ export const WIRE_ERROR_CODES = [
   "transaction_failed",
   /** Sent but not confirmed in time. It may still land: sync and see whether the spent notes are spent before retrying. */
   "not_confirmed",
+  /** v2: the fee note does not pay this relayer what it asks, in an asset it takes. */
+  "fee_note_invalid",
+  /** v2: the relayer does no swaps, or has no route for this one now. */
+  "swap_unavailable",
+  /** v2: the relayer does not pay for moves from the earlier pool. */
+  "move_unavailable",
   // ---- screener ----
   /** The transaction is not exactly one canonical loch_pool deposit. */
   "invalid_transaction",
@@ -80,6 +86,9 @@ export const WIRE_ERROR_STATUS: Readonly<Record<Exclude<WireErrorCode, "network_
   tree_full: 409,
   transaction_failed: 422,
   not_confirmed: 504,
+  fee_note_invalid: 400,
+  swap_unavailable: 422,
+  move_unavailable: 422,
   invalid_transaction: 400,
   denied: 403,
   deposits_paused: 409,
@@ -244,6 +253,12 @@ export interface ScreenerInfo {
    * not otherwise.
    */
   lookupTable?: string;
+  /**
+   * The v2 pool's address lookup table (base58), for a version-0 v2 deposit
+   * (docs/v2.md section 10). A v2 deposit loads accounts from it and from no
+   * other table.
+   */
+  lookupTableV2?: string;
 }
 // A screening service may send more than these fields (the one in this
 // repository adds `policyVersion`, docs/protocol.md section 14.2). The

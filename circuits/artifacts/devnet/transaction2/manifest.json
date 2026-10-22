@@ -1,0 +1,88 @@
+{
+  "name": "loch-transaction2",
+  "network": "devnet",
+  "warning": "Single-contributor development setup, not a ceremony. Whoever ran it could have kept the toxic waste and could forge v2 proofs. Never use these artifacts with real funds.",
+  "generatedAt": "2026-10-22T06:34:18.927Z",
+  "circuit": {
+    "entry": "circuits/transaction2.circom",
+    "main": "Transaction2(26, 2, 3)",
+    "curve": "bn128",
+    "protocol": "groth16",
+    "merkleLevels": 26,
+    "inputs": 2,
+    "outputs": 3,
+    "publicSignals": [
+      "root",
+      "publicAmount",
+      "publicAsset",
+      "extDataHash",
+      "inputNullifier[0]",
+      "inputNullifier[1]",
+      "outputCommitment[0]",
+      "outputCommitment[1]",
+      "outputCommitment[2]"
+    ],
+    "sources": {
+      "transaction2.circom": {
+        "sha256": "438463a4b814a4ef218597176daf8853ea15c433e9f38c4fdc7d875a16984a5c"
+      },
+      "lib.circom": {
+        "sha256": "e9adb76d3badf3d6e26a651101ac07a4130d59901c8146241e3f6a60109d08f9"
+      }
+    }
+  },
+  "constraints": {
+    "prime": "21888242871839275222246405745257275088548364400416034343698204186575808495617",
+    "nonLinear": 16875,
+    "linear": 0,
+    "total": 16875,
+    "wires": 16941,
+    "publicInputs": 9,
+    "publicOutputs": 0,
+    "privateInputs": 72,
+    "labels": 53992
+  },
+  "toolchain": {
+    "circom": "2.2.3",
+    "circomFlags": [
+      "--r1cs",
+      "--wasm",
+      "--sym",
+      "--O2"
+    ],
+    "circomlib": "2.0.5",
+    "snarkjs": "0.7.6",
+    "node": "v22.22.1"
+  },
+  "r1cs": {
+    "sha256": "2d67959108f2ae33193924dc3e26815c27cbe8169422249fa17dcfc09da3d9cd",
+    "bytes": 7944472,
+    "path": "build/transaction2/transaction2.r1cs",
+    "committed": false
+  },
+  "setup": {
+    "kind": "single-contributor development setup",
+    "contribution": "loch transaction2 single dev contribution 2026-10-22T06:33:11Z",
+    "ptau": {
+      "file": "powersOfTau28_hez_final_15.ptau",
+      "power": 15,
+      "source": "Hermez perpetual powers of tau: powersOfTau28_hez_final_15.ptau (cached copy), BLAKE2b-512 verified against the hash published in the snarkjs README",
+      "blake2b512": "982372c867d229c236091f767e703253249a9b432c1710b4f326306bfa2428a17b06240359606cfe4d580b10a5a1f63fbed499527069c18ae17060472969ae6e",
+      "committed": false
+    }
+  },
+  "files": {
+    "transaction2.wasm": {
+      "sha256": "5017a6beb3819a423589794488f07245d89cc277052aa618d9560a2729fe2f78",
+      "bytes": 2527105
+    },
+    "transaction2_final.zkey": {
+      "sha256": "bab95d34e2f2c03acfd81ff3f3cb58f8b84efa78e28c47c6c3bb652e3c2f95fa",
+      "bytes": 10569324
+    },
+    "verification_key.json": {
+      "sha256": "12ea059df270744c06cee20db3362513256efd8ccdf6fd3c5c88a96230c45689",
+      "bytes": 4386
+    }
+  }
+}

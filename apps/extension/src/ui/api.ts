@@ -6,7 +6,7 @@ import { STATE_CHANGED, type UiReply, type UiRequest } from "../shared/view.js";
 
 /** What a form has in it, kept while the popup is closed (it closes whenever the wallet opens). */
 export interface Draft {
-  kind: "dive" | "send" | "surface";
+  kind: "dive" | "send" | "surface" | "move";
   to: string;
   amount: string;
 }

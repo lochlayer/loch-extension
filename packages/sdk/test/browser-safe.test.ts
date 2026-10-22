@@ -76,8 +76,28 @@ describe("sources", () => {
       "poseidon-lite/poseidon3",
       "snarkjs",
     ]);
-    // Everything except the filesystem helper and the checking-only entry point is part of the main entry point.
-    expect(files.filter((file) => !reached.includes(file))).toEqual(["node.ts", "snarkjs.d.ts", "verify.ts"]);
+    // Everything except the filesystem helper, the checking-only entry point and v2 is part of the main entry point.
+    expect(files.filter((file) => !reached.includes(file) && !file.startsWith("v2/"))).toEqual(["node.ts", "snarkjs.d.ts", "verify.ts"]);
+  });
+
+  it("the v2 entry point imports no Node module and only the agreed dependencies", () => {
+    const { files: reached, packages } = reach("v2/index.ts");
+    expect(reached).not.toContain("node.ts");
+    expect(packages.filter(isNodeBuiltin)).toEqual([]);
+    expect(packages).toEqual([
+      "@noble/ciphers/aes",
+      "@noble/ciphers/chacha",
+      "@noble/curves/ed25519",
+      "@noble/hashes/hkdf",
+      "@noble/hashes/sha2",
+      "@scure/base",
+      "@solana/web3.js",
+      "poseidon-lite/poseidon1",
+      "poseidon-lite/poseidon2",
+      "poseidon-lite/poseidon3",
+    ]);
+    // Every v2 file is reachable from the v2 entry point. No snarkjs: the prover is passed in.
+    expect(files.filter((file) => file.startsWith("v2/") && !reached.includes(file))).toEqual([]);
   });
 
   it("the verify entry point imports no Node module, no prover and nothing that builds a transaction", () => {

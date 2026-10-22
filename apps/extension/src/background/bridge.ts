@@ -22,7 +22,7 @@
 import { randomToken } from "../shared/bytes.js";
 import { isRecord } from "../shared/guards.js";
 import { type BridgeAnswer, type BridgeRequest, type SenderLike, parseBridgeAnswer } from "../shared/messages.js";
-import { BRIDGE_TTL_MS, type BridgeTab, type Core, type DiveRecord, type FlowRecord, type PendingBridge, type UnlockRecord, fail } from "./core.js";
+import { BRIDGE_TTL_MS, type BridgeTab, type Core, type DiveRecord, type FlowRecord, type PendingBridge, type SpendRecord, type UnlockRecord, fail } from "./core.js";
 import { isConnectPage } from "./settings.js";
 
 const TAB_KEY = "bridge:tab";
@@ -30,11 +30,11 @@ const PENDING_KEY = "bridge:pending";
 /** How long the connect page gets to load and announce itself. */
 const OPEN_TIMEOUT_MS = 15_000;
 
-/** A flow that reaches the wallet. */
-type BridgeFlow = UnlockRecord | DiveRecord;
+/** A flow that reaches the wallet: a move is signed by it too. */
+type BridgeFlow = UnlockRecord | DiveRecord | (SpendRecord & { move: true; connectUrl: string });
 
 function usesBridge(flow: FlowRecord): flow is BridgeFlow {
-  return flow.kind === "unlock" || flow.kind === "dive";
+  return flow.kind === "unlock" || flow.kind === "dive" || (flow.kind === "surface" && flow.move === true && flow.connectUrl !== undefined);
 }
 
 /** Asks the tab's content script where it is. True only when it answers from exactly the tab's address. */

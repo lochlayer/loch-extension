@@ -27,9 +27,13 @@ export const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 export const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
-/** Rent-exempt minimum of a system account without data (890,880 lamports). */
+/**
+ * Rent-exempt minimum of a system account without data (890,880 lamports) before mainnet and
+ * devnet lowered rent. The fallback when the cluster's own figure cannot be read
+ * (background/rent.ts): higher than today's, so a check made with it is safe.
+ */
 export const SYSTEM_RENT_MINIMUM = 890_880n;
-/** Rent-exempt minimum of one nullifier record (9 bytes of data). A transaction creates two. */
+/** Rent-exempt minimum of one nullifier record (9 bytes of data) before rent was lowered; the fallback, as above. A transaction creates two. */
 export const NULLIFIER_RECORD_RENT = 953_520n;
 /** One signature costs this much. A deposit carries two: the depositor's and the screener's. */
 export const SIGNATURE_FEE = 5_000n;

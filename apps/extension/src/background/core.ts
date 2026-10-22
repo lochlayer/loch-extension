@@ -7,15 +7,18 @@
 // before each step and after it, and `resume` decides what an interrupted step means.
 
 import type { DepthCircuitInput, Prover, RelayRequest, RelayResponse, RelayerInfo, ScreenRequest, ScreenResponse, ScreenerInfo } from "@loch/sdk";
+import type { CircuitInputV2, MoveRequestV2, QuoteRequestV2, QuoteResponseV2, RelayRequestV2, RelayerInfoV2 } from "@loch/sdk/v2";
 import type { ScanOptions, ScanResult } from "@loch/scanner-core";
 
 import { BUILD, fixedConnectUrl } from "../shared/build.js";
 import type { Cluster } from "../shared/constants.js";
 import type { BridgeRequest, WalletInfo } from "../shared/messages.js";
-import type { Failure, FailureCode, FlowKind, FlowStatus, FlowView, ScanView, Snapshot, SyncView } from "../shared/view.js";
+import { KNOWN_ASSETS, NATIVE_MINT, assetMeta } from "../shared/assets.js";
+import type { AssetView, Failure, FailureCode, FlowKind, FlowStatus, FlowView, Loch2View, ScanView, Snapshot, SyncView } from "../shared/view.js";
 import type { KV } from "./kv.js";
 import type { Chain } from "./network.js";
 import { type ProofRoot, shieldedTotals } from "./pending.js";
+import { assetTotals } from "./pendingV2.js";
 import { type OhttpProblem, type Settings, loadSettings } from "./settings.js";
 import { Store } from "./store.js";
 
@@ -33,7 +36,7 @@ export interface TabsApi {
 export interface FlowProof extends ProofRoot {
   /** The Merkle root it names, decimal. */
   root: string;
-  /** Commitments (decimal) of its two output notes. */
+  /** Commitments (decimal) of its output notes: two (v1) or three (v2). */
   outputs: string[];
   /** The relayer fee it pays, lamports. */
   fee: string;
@@ -42,6 +45,13 @@ export interface FlowProof extends ProofRoot {
 export interface RelayerApi {
   info(): Promise<RelayerInfo>;
   relay(request: RelayRequest): Promise<RelayResponse>;
+}
+
+export interface RelayerApiV2 {
+  info(): Promise<RelayerInfoV2>;
+  relay(request: RelayRequestV2): Promise<RelayResponse>;
+  quote(request: QuoteRequestV2): Promise<QuoteResponseV2>;
+  move(request: MoveRequestV2): Promise<RelayResponse>;
 }
 
 export interface ScreenerApi {
@@ -57,9 +67,13 @@ export interface Env {
   /** The RPC connection and the guarded fetch for the given settings. */
   chain(settings: Settings): Chain;
   relayer(settings: Settings, chain: Chain): RelayerApi;
+  /** The same relayer's v2 routes (docs/v2.md section 9). */
+  relayerV2(settings: Settings, chain: Chain): RelayerApiV2;
   screener(settings: Settings, chain: Chain): ScreenerApi;
   /** Proves in the offscreen document. */
   prover: Prover;
+  /** Proves v2 transactions, in the same document. */
+  proverV2: Prover<CircuitInputV2>;
   /** Proves depth proofs, in the same document. */
   depthProver: Prover<DepthCircuitInput>;
   tabs: TabsApi;
@@ -115,7 +129,14 @@ export interface DiveRecord extends FlowBase {
   walletName: string;
   /** The connect page this flow uses, fixed when it starts. */
   connectUrl: string;
+  /** Base units of `mint` (lamports for SOL). */
   amount: string;
+  /** 2: a deposit into the v2 pool. Absent: the earlier pool. */
+  pool?: 2;
+  /** v2: the asset deposited (base58 mint). */
+  mint?: string;
+  /** v2, a token: the depositor's token account the tokens come from. */
+  source?: string;
   /** The proven `transact` instruction data, base64. Public once sent. Kept so a retry need not prove again. */
   data?: string;
   /** Commitments of the two notes the deposit creates. */
@@ -125,6 +146,8 @@ export interface DiveRecord extends FlowBase {
    * deposit is built as version 0, with the lookup table below. Otherwise it is version 1.
    */
   legacyTransaction?: boolean;
+  /** What the deposit costs beyond its amount, at the cluster's rent (lamports). Set when checked. */
+  overhead?: string;
   /** The pool's lookup table the screening service named in its info (base58): a version 0 deposit is compiled with it. */
   lookupTable?: string;
   /** The transaction with the screener's signature, waiting for the wallet's. base64. */
@@ -137,8 +160,19 @@ export interface DiveRecord extends FlowBase {
 }
 
 export interface SpendRecord extends FlowBase {
-  kind: "send" | "surface" | "consolidate";
+  kind: "send" | "surface" | "consolidate" | "swap";
   address: string;
+  /** 2: a spend in the v2 pool. Absent: the earlier pool. */
+  pool?: 2;
+  /** v2: the asset spent (base58 mint); the fee is paid in it too. */
+  mint?: string;
+  /** v2 swap: the asset it returns, and the least of it the user agreed to (base units). */
+  toMint?: string;
+  minOut?: string;
+  /** v2 surface of a token: the destination wallet; the destination is its associated token account. */
+  owner?: string;
+  /** v2: the proven request, with the opening of the fee note. Public once relayed. */
+  requestV2?: RelayRequestV2;
   /** Lamports to send or surface. "0" for a consolidation. */
   amount: string;
   /** Shielded address or payment code (send), or public address (surface). */
@@ -173,6 +207,22 @@ export interface SpendRecord extends FlowBase {
    * claim's keys. Session storage and the vault only; never part of a FlowView.
    */
   claim?: string;
+  /**
+   * A move (docs/v2.md section 11): a surface of the earlier pool's notes to this wallet, with
+   * no fee, in one transaction with a deposit of the same amount into the new pool. The wallet
+   * signs it, the screening service co-signs it, and the relayer pays for it.
+   */
+  move?: true;
+  /** A move: the wallet asked, and the connect page used. Fixed when the flow starts. */
+  walletName?: string;
+  connectUrl?: string;
+  /** A move: the deposit into the new pool, base64 of borsh(TransactArgsV2), and its output commitments. */
+  moveDeposit?: string;
+  moveOutputs?: string[];
+  /** A move: the transaction shown to the wallet (no signatures), what the wallet returned, and the same with the screener's signature. Base64. */
+  moveUnsigned?: string;
+  moveWalletSigned?: string;
+  moveSigned?: string;
 }
 
 /** Collecting a claim link: the note the code holds is moved to this wallet's own address. */
@@ -238,6 +288,8 @@ export const BRIDGE_TTL_MS = 5 * 60 * 1000;
 // ---------------------------------------------------------------- view cache
 
 interface ViewCache {
+  /** Whether this cluster has the v2 pool, as the last sync found; absent before it looked. */
+  v2?: boolean;
   publicBalance: string | null;
   /** When it was read, milliseconds. */
   publicBalanceAt: number | null;
@@ -394,8 +446,13 @@ export class Core {
       view.cancellable = flow.status === "running" || flow.status === "waiting";
     } else if (flow.kind === "dive") {
       view.amount = flow.amount;
+      if (flow.pool === 2) {
+        view.pool = 2;
+        view.mint = flow.mint ?? NATIVE_MINT;
+      }
       view.walletName = flow.walletName;
       view.connectUrl = flow.connectUrl;
+      if (flow.overhead) view.overhead = flow.overhead;
       view.proofKept = flow.data !== undefined;
       view.cancellable = (flow.status === "running" || flow.status === "waiting") && ["checking", "proving", "screening", "signing", "cosigning"].includes(flow.step);
     } else if (flow.kind === "claim") {
@@ -408,13 +465,26 @@ export class Core {
     } else {
       view.amount = flow.amount;
       view.fee = flow.fee;
+      if (flow.pool === 2) {
+        view.pool = 2;
+        view.mint = flow.mint ?? NATIVE_MINT;
+        if (flow.toMint) view.toMint = flow.toMint;
+        if (flow.minOut) view.minOut = flow.minOut;
+      }
       // The interface is shown who is paid, never a payment code: its secret stays in the worker.
       // A claim link has no payee to show: the address of its keys means nothing to anyone.
       if (flow.claim) view.claim = true;
       else if (flow.to) view.to = flow.payee ?? flow.to;
-      view.proofKept = flow.request !== undefined;
+      view.proofKept = flow.request !== undefined || flow.requestV2 !== undefined;
       view.bound = flow.handed === true;
       view.cancellable = flow.status === "running" && ["checking", "proving"].includes(flow.step);
+      if (flow.move) {
+        view.move = true;
+        if (flow.walletName) view.walletName = flow.walletName;
+        if (flow.connectUrl) view.connectUrl = flow.connectUrl;
+        // Until the relayer has it, a move can be stopped: nothing has left this device but to the wallet and the screener.
+        view.cancellable = !flow.handed && (flow.status === "running" || flow.status === "waiting") && ["checking", "proving", "signing", "cosigning"].includes(flow.step);
+      }
     }
     return view;
   }
@@ -437,6 +507,7 @@ export class Core {
       publicBalance: null,
       publicBalanceAt: null,
       shielded: null,
+      loch2: null,
       sync: { status: "idle" },
       activity: [],
       flow: flow ? this.flowView(flow) : null,
@@ -465,6 +536,7 @@ export class Core {
         notes: totals.notes,
         settling: totals.settling,
       };
+      if (view.v2) snapshot.loch2 = loch2View(runtime.v2, view.cluster);
       // Which entries this device can make a receipt, a report or a claim code for.
       const recorded = new Set(runtime.records.map((record) => record.flowId));
       snapshot.activity = runtime.activity.map((entry) => (entry.status === "confirmed" && recorded.has(entry.id) ? { ...entry, record: true as const } : entry));
@@ -477,3 +549,24 @@ export class Core {
 
 /** Set by the build of the worker when the Oblivious HTTP client is wired in. */
 export const OHTTP_AVAILABLE = { value: false };
+
+/** The v2 pool of an unlocked wallet, per asset: SOL first, then the cluster's known assets, then others it holds. */
+export function loch2View(v2: import("./store.js").PoolV2Runtime, cluster: import("../shared/constants.js").Cluster | null): Loch2View {
+  const totals = assetTotals(v2.state, v2.pending);
+  const known = cluster ? KNOWN_ASSETS[cluster] : KNOWN_ASSETS.devnet.slice(0, 1);
+  const order = [...known.map((asset) => asset.mint), ...v2.mints, ...totals.assets.map((asset) => asset.mint)].filter((mint, index, list) => list.indexOf(mint) === index);
+  const assets: AssetView[] = order.map((mint) => {
+    const meta = assetMeta(cluster, mint);
+    const total = totals.assets.find((asset) => asset.mint === mint);
+    return {
+      mint,
+      symbol: meta.symbol,
+      decimals: meta.decimals,
+      balance: (total?.expected ?? 0n).toString(),
+      spendable: (total?.spendable ?? 0n).toString(),
+      largestPair: (total?.largestPair ?? 0n).toString(),
+      notes: total?.notes ?? 0,
+    };
+  });
+  return { address: v2.address, assets, settling: totals.settling, neverSynced: v2.neverSynced };
+}

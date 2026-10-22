@@ -8,16 +8,17 @@ import { useEffect, useState } from "preact/hooks";
 
 import { displaySol } from "../shared/amounts.js";
 import { mainnetTestingEnabled } from "../shared/build.js";
-import { activityDelta, activityMeta, activityTitle, clockText, doneSentence, HOME_ACTIONS, HOME_COPY, isPublicActivity, shortAddress, WELCOME_COPY } from "../shared/copy.js";
+import { activityAmountText, activityDelta, activityMeta, activityTitle, clockText, doneSentence, EARLIER_COPY, HOME_ACTIONS, HOME_COPY, isPublicActivity, shortAddress, WELCOME_COPY } from "../shared/copy.js";
+import { isNative } from "../shared/assets.js";
 import type { ActivityEntry, PublicBalanceReply, Snapshot, SyncView } from "../shared/view.js";
 import type { Api } from "./api.js";
-import { FlowSheet, FormSheet, type FormKind, WalletsSheet } from "./flows.js";
-import { Amount, Icon, type IconName, Sounding, Toasts } from "./parts.js";
+import { FlowSheet, FormSheet, type FormKind, MoveSheet, SwapSheet, WalletsSheet } from "./flows.js";
+import { Amount, Icon, type IconName, Sounding, Toasts, Units } from "./parts.js";
 import { useSnapshot, useToasts } from "./state.js";
 import { ActivityView, ReceiveBlock, ReceiveView, ReportView, SettingsView } from "./views.js";
 
 export type View = "home" | "activity" | "receive" | "report" | "settings";
-type SheetName = FormKind | "wallets";
+type SheetName = FormKind | "wallets" | "swap";
 
 const ACTIVITY_ICON: Record<ActivityEntry["kind"], IconName> = {
   dive: "dive",
@@ -27,6 +28,7 @@ const ACTIVITY_ICON: Record<ActivityEntry["kind"], IconName> = {
   consolidate: "shielded",
   restored: "shielded",
   claim: "receive",
+  swap: "swap",
 };
 
 const CLUSTER_NAME = { devnet: "Devnet", testnet: "Testnet", localnet: "Localnet", "mainnet-beta": "Mainnet" } as const;
@@ -81,7 +83,7 @@ export function ActivityRow({ entry, now }: { entry: ActivityEntry; now: number 
         <span class="activity__meta">{activityMeta(entry, now)}</span>
       </span>
       <span class={`activity__amount fig${entry.status === "failed" ? " is-void" : ""}`} data-pending={pending ? "" : undefined}>
-        <Sign lamports={activityDelta(entry)} />
+        {isNative(entry.mint) && !entry.move ? <Sign lamports={activityDelta(entry)} /> : activityAmountText(entry)}
       </span>
       {/* The row's own class sets the slope; this only helps a reader that cannot see it. */}
       <span class="visually-hidden">{shielded ? "Shielded." : "Public."}</span>
@@ -214,6 +216,83 @@ function Land({ snapshot, onWallets, onReport, onReadBalance, onSettings }: { sn
   );
 }
 
+/**
+ * The home screen with the v2 pool: one hero, SOL in the Loch; under it the other assets and,
+ * while it holds anything, the earlier pool with the action that moves it; five actions.
+ */
+function HomeV2({ snapshot, api, go, open, busy, recentList }: { snapshot: Snapshot; api: Api; go: (view: View) => void; open: (sheet: SheetName) => void; busy: boolean; recentList: preact.JSX.Element }) {
+  const loch2 = snapshot.loch2!;
+  const sol = loch2.assets.find((asset) => isNative(asset.mint))!;
+  const others = loch2.assets.filter((asset) => !isNative(asset.mint) && BigInt(asset.balance) > 0n);
+  const earlier = snapshot.shielded ? BigInt(snapshot.shielded.balance) : 0n;
+  const canSpend = loch2.assets.some((asset) => BigInt(asset.spendable) > 0n);
+  const note = loch2.settling > 0 ? `${loch2.settling === 1 ? "One transfer is" : `${loch2.settling} transfers are`} still settling.` : BigInt(sol.balance) === 0n && others.length === 0 ? HOME_COPY.empty : null;
+  const sync = () => void api.call({ loch: "ui", type: "sync" });
+  return (
+    <>
+      <div class="popup__water popup__water--home water" data-depth="60">
+        <section class="balance balance--shielded" aria-label="Shielded balance">
+          <div class="balance__row">
+            <p class="balance__label">{HOME_COPY.shielded}</p>
+            <SyncStatus sync={snapshot.sync} onSync={sync} />
+          </div>
+          <p class="balance__figure">
+            <Sounding lamports={BigInt(sol.balance)} />
+            <span class="fig-unit">{unitOf(snapshot)}</span>
+          </p>
+          {note && <p class="balance__note">{note}</p>}
+          {(others.length > 0 || earlier > 0n) && (
+            <dl class="deflist deflist--kv">
+              {others.map((asset) => (
+                <div class="deflist__row" key={asset.mint}>
+                  <dt>{asset.symbol}</dt>
+                  <dd>
+                    <Units units={BigInt(asset.balance)} decimals={asset.decimals} shielded />
+                  </dd>
+                </div>
+              ))}
+              {earlier > 0n && (
+                <div class="deflist__row">
+                  <dt>{EARLIER_COPY.label}</dt>
+                  <dd>
+                    <Amount lamports={earlier} shielded /> SOL{" "}
+                    <button class="link link--quiet" type="button" disabled={busy} onClick={() => open("move")}>
+                      {EARLIER_COPY.move}
+                    </button>
+                  </dd>
+                </div>
+              )}
+            </dl>
+          )}
+        </section>
+        <div class="popup__actions popup__actions--five">
+          <button class={`btn ${canSpend ? "btn--secondary" : "btn--primary"} btn--stacked`} type="button" disabled={busy} onClick={() => open("dive")}>
+            <Icon name="dive" />
+            {HOME_ACTIONS.dive}
+          </button>
+          <button class={`btn ${canSpend ? "btn--primary" : "btn--secondary"} btn--stacked`} type="button" disabled={busy || !canSpend} onClick={() => open("send")} aria-label="Send privately">
+            <Icon name="send" />
+            {HOME_ACTIONS.send}
+          </button>
+          <button class="btn btn--secondary btn--stacked" type="button" onClick={() => go("receive")}>
+            <Icon name="receive" />
+            {HOME_ACTIONS.receive}
+          </button>
+          <button class="btn btn--secondary btn--stacked" type="button" disabled={busy || !canSpend} onClick={() => open("swap")}>
+            <Icon name="swap" />
+            {HOME_ACTIONS.swap}
+          </button>
+          <button class="btn btn--secondary btn--stacked" type="button" disabled={busy || !canSpend} onClick={() => open("surface")}>
+            <Icon name="surface" />
+            {HOME_ACTIONS.surface}
+          </button>
+        </div>
+      </div>
+      {recentList}
+    </>
+  );
+}
+
 function Home({ snapshot, api, go, open, toast }: { snapshot: Snapshot; api: Api; go: (view: View) => void; open: (sheet: SheetName) => void; toast: (text: string, kind?: "done" | "caution" | "plain") => void }) {
   const shielded = snapshot.shielded;
   const wallet = snapshot.wallets.find((item) => item.address === snapshot.active);
@@ -245,10 +324,50 @@ function Home({ snapshot, api, go, open, toast }: { snapshot: Snapshot; api: Api
   }
 
   const balance = BigInt(shielded.balance);
-  const empty = balance === 0n && snapshot.activity.length === 0;
+  const empty = (snapshot.loch2 ? snapshot.loch2.assets.every((asset) => BigInt(asset.balance) === 0n) && balance === 0n : balance === 0n) && snapshot.activity.length === 0;
   const canSpend = BigInt(shielded.spendable) > 0n;
   const recent = snapshot.activity.slice(0, 4);
   const note = shielded.settling > 0 ? `${shielded.settling === 1 ? "One transfer is" : `${shielded.settling} transfers are`} still settling.` : balance === 0n ? HOME_COPY.empty : null;
+  const recentList = api.popup ? (
+    <section class="popup__deep popup__deep--home water" data-depth="120" aria-label="Recent activity">
+      <div class="popup__deep-head">
+        <h2>{HOME_COPY.recent}</h2>
+        {!empty && (
+          <a
+            href="#activity"
+            onClick={(event) => {
+              event.preventDefault();
+              go("activity");
+            }}
+          >
+            {HOME_COPY.all}
+          </a>
+        )}
+      </div>
+      {recent.length === 0 ? (
+        <div class="empty">
+          <p class="empty__title">{HOME_COPY.emptyTitle}</p>
+          <p>{HOME_COPY.emptyLine}</p>
+        </div>
+      ) : (
+        <ul class="activity">
+          {recent.map((entry) => (
+            <li class={`activity__row ${isPublicActivity(entry) ? "is-public" : "is-shielded"}`} data-state={entry.status === "confirmed" ? undefined : "pending"} key={entry.id}>
+              <ActivityRow entry={entry} now={now} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  ) : (
+    <section class="popup__deep water" data-depth="120" aria-label="Receive privately">
+      <div class="popup__deep-head">
+        <h2>Receive privately</h2>
+      </div>
+      <ReceiveBlock snapshot={snapshot} api={api} toast={toast} compact />
+    </section>
+  );
+  if (snapshot.loch2) return <HomeV2 snapshot={snapshot} api={api} go={go} open={open} busy={busy} recentList={recentList} />;
   return (
     <>
       <div class="popup__water popup__water--home water" data-depth="60">
@@ -442,7 +561,11 @@ export function App({ api }: { api: Api }) {
     <FlowSheet snapshot={snapshot} flow={activeFlow} api={api} toast={toast} openForm={(kind) => setSheet(kind)} openSettings={() => go("settings")} />
   ) : sheet === "wallets" ? (
     <WalletsSheet snapshot={snapshot} api={api} onClose={closeSheet} go={go} />
-  ) : sheet && snapshot.shielded ? (
+  ) : sheet === "swap" && snapshot.loch2 ? (
+    <SwapSheet snapshot={snapshot} api={api} onClose={closeSheet} openSettings={() => go("settings")} />
+  ) : sheet === "move" && snapshot.shielded ? (
+    <MoveSheet snapshot={snapshot} api={api} onClose={closeSheet} openSettings={() => go("settings")} />
+  ) : sheet && sheet !== "swap" && snapshot.shielded ? (
     <FormSheet kind={sheet} snapshot={snapshot} api={api} onClose={closeSheet} openSettings={() => go("settings")} />
   ) : null;
 

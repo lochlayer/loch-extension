@@ -5,6 +5,7 @@ import { formatSol } from "@loch/design/numerals";
 import type { ComponentChildren, JSX } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 
+import { formatUnits, isNative } from "../shared/assets.js";
 import { DOCS_PAGE, elapsedText, failureCopy, type FailureContext, HOW_IT_WORKS, MORE_IN_DOCS, richParts, stageLine, statusSentence } from "../shared/copy.js";
 import type { Failure, FlowView } from "../shared/view.js";
 
@@ -25,6 +26,7 @@ export type IconName =
   | "settings"
   | "shielded"
   | "surface"
+  | "swap"
   | "wallet";
 
 export function Icon({ name, small, label }: { name: IconName; small?: boolean; label?: string }) {
@@ -310,11 +312,14 @@ export function AmountField({
   hint,
   error,
   disabled,
+  unit = "SOL",
 }: {
   id: string;
   label: string;
   value: string;
   shielded: boolean;
+  /** The asset's symbol. Default SOL. */
+  unit?: string;
   onInput: (value: string) => void;
   onMax?: () => void;
   hint?: ComponentChildren;
@@ -340,7 +345,7 @@ export function AmountField({
           aria-describedby={`${hint ? `${id}-hint ` : ""}${error ? `${id}-error` : ""}`.trim() || undefined}
           onInput={(event) => onInput(event.currentTarget.value)}
         />
-        <span class="amount__unit">SOL</span>
+        <span class="amount__unit">{unit}</span>
         {onMax && (
           <button class="btn btn--quiet btn--sm" type="button" onClick={onMax} disabled={disabled}>
             Max
@@ -394,6 +399,49 @@ export function Toasts({ toasts }: { toasts: { id: number; text: string; kind: "
           <p>{toast.text}</p>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * An amount of a v2 asset in its own precision: `decimals` places, cut toward zero to three
+ * unless `exact`. SOL amounts keep <Amount>, which writes them as the design system says.
+ */
+export function Units({ units, decimals, shielded, exact }: { units: bigint; decimals: number; shielded?: boolean; exact?: boolean }) {
+  const text = formatUnits(units, decimals, exact ? decimals : Math.min(3, decimals));
+  return (
+    <span class={`fig ${shielded ? "is-shielded" : "is-public"}`} title={exact ? undefined : formatUnits(units, decimals)}>
+      {text}
+    </span>
+  );
+}
+
+/** An amount of any asset with its symbol: SOL through <Amount>, a token through <Units>. */
+export function AssetAmount({ units, mint, decimals, symbol, shielded, exact }: { units: bigint; mint?: string; decimals: number; symbol: string; shielded?: boolean; exact?: boolean }) {
+  return isNative(mint) ? (
+    <>
+      <Amount lamports={units} shielded={shielded} exact={exact} /> SOL
+    </>
+  ) : (
+    <>
+      <Units units={units} decimals={decimals} shielded={shielded} exact={exact} /> {symbol}
+    </>
+  );
+}
+
+/** Which asset a form is about: one button per asset, the chosen one pressed. Nothing is drawn for a single asset. */
+export function AssetPicker({ assets, value, onChange, label = "Asset" }: { assets: readonly { mint: string; symbol: string }[]; value: string; onChange: (mint: string) => void; label?: string }) {
+  if (assets.length < 2) return null;
+  return (
+    <div class="field">
+      <span class="field__label">{label}</span>
+      <div class="segmented" role="radiogroup" aria-label={label}>
+        {assets.map((asset) => (
+          <button key={asset.mint} type="button" role="radio" aria-checked={asset.mint === value ? "true" : "false"} onClick={() => onChange(asset.mint)}>
+            {asset.symbol}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

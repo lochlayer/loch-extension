@@ -67,15 +67,19 @@ import type { OwnedNote } from "@loch/sdk";
 import { type AddressLookupTableAccount, type Connection, PublicKey, VersionedTransaction } from "@solana/web3.js";
 
 import { bytesEqual, fromBase64, randomToken, toBase64, utf8 } from "../shared/bytes.js";
-import { DEPOSIT_OVERHEAD, SYSTEM_RENT_MINIMUM, chainOf } from "../shared/constants.js";
+import { SYSTEM_RENT_MINIMUM, chainOf } from "../shared/constants.js";
 import type { BridgeAnswer, BridgeRequest, WalletInfo } from "../shared/messages.js";
 import type { Failure, SyncView } from "../shared/view.js";
 import { addActivity, setActivityStatus } from "./activity.js";
 import { closeBridgeTab, ensureBridgeTab, pendingBridge, sendBridgeRequest } from "./bridge.js";
 import { resumeClaim, stepClaim } from "./claimFlow.js";
+import { feeCap, letGoV2, resumeSendingV2, stepDiveV2, stepSpendV2 } from "./flowsV2.js";
+import { moveAnswer, releaseMove, stepMove } from "./move.js";
+import { NATIVE_MINT } from "../shared/assets.js";
 import { BRIDGE_TTL_MS, type Core, type DiveRecord, FlowFailure, type FlowProof, type FlowRecord, type SpendRecord, type UnlockRecord, fail } from "./core.js";
 import { type Chain, MainnetRefusedError, assertAllowedCluster, describeNetworkError, isNetworkFailure, readCluster } from "./network.js";
 import { payeeOf } from "./paymentCode.js";
+import { depositCosts } from "./rent.js";
 import { type PendingSpend, chainRootsOf, hasLanded, inputSpent, onlyNotes, proofExpired, spendableNotes, withLocks } from "./pending.js";
 import { storePublicBalance } from "./publicBalance.js";
 import { addRecord, recordOf } from "./records.js";
@@ -203,21 +207,25 @@ async function run(core: Core): Promise<void> {
     try {
       await checkCancel(core, flow);
       if (flow.kind === "unlock") await stepUnlock(core, flow);
-      else if (flow.kind === "dive") await stepDive(core, flow);
+      else if (flow.kind === "dive") await (flow.pool === 2 ? stepDiveV2(core, flow) : stepDive(core, flow));
       else if (flow.kind === "claim") await stepClaim(core, flow);
+      else if (flow.pool === 2) await stepSpendV2(core, flow);
       else await stepSpend(core, flow);
     } catch (error) {
       const failure = toFailure(error, flow, await core.settings());
       if (failure.code === "cancelled" && flow.kind === "dive") {
         // Nothing was sent.
         const runtime = await core.store.runtime(flow.address).catch(() => null);
+        if (runtime && flow.pool === 2) runtime.v2.pending = runtime.v2.pending.filter((entry) => entry.flowId !== flow.id);
         if (runtime) await releasePending(core, runtime, flow.id, "keep");
       }
       if (isSpend(flow)) {
-        if (failure.code === "cancelled" && !flow.handed) {
+        // A move the relayer never had cannot be completed by anyone: its notes go back.
+        if (flow.move) await releaseMove(core, flow);
+        else if (failure.code === "cancelled" && !flow.handed) {
           // Nothing ever left this device: the notes the proof would have spent are free again.
           const runtime = await core.store.runtime(flow.address).catch(() => null);
-          if (runtime) await letGo(core, runtime, flow, "keep");
+          if (runtime) await (flow.pool === 2 ? letGoV2(core, runtime, flow, "keep") : letGo(core, runtime, flow, "keep"));
           else forgetProofs(flow);
         }
         open(flow, failure);
@@ -228,7 +236,7 @@ async function run(core: Core): Promise<void> {
 }
 
 function isSpend(flow: FlowRecord): flow is SpendRecord {
-  return flow.kind === "send" || flow.kind === "surface" || flow.kind === "consolidate";
+  return flow.kind === "send" || flow.kind === "surface" || flow.kind === "consolidate" || flow.kind === "swap";
 }
 
 /**
@@ -244,7 +252,7 @@ function open(flow: SpendRecord, failure: Failure): Failure {
   return failure;
 }
 
-async function checkCancel(core: Core, flow: FlowRecord): Promise<void> {
+export async function checkCancel(core: Core, flow: FlowRecord): Promise<void> {
   if ((await core.env.session.get<string>(CANCEL_KEY)) !== flow.id) return;
   await core.env.session.remove(CANCEL_KEY);
   throw fail("cancelled");
@@ -328,13 +336,13 @@ async function stepUnlock(core: Core, flow: UnlockRecord): Promise<void> {
 }
 
 /** Sends a request toward the wallet and leaves the flow waiting for the answer. */
-async function ask(core: Core, flow: FlowRecord, request: BridgeRequest): Promise<void> {
+export async function ask(core: Core, flow: FlowRecord, request: BridgeRequest): Promise<void> {
   await sendBridgeRequest(core, flow, request);
   flow.status = "waiting";
   await core.saveFlow(flow);
 }
 
-function walletFailure(answer: Extract<BridgeAnswer, { ok: false }>): FlowFailure {
+export function walletFailure(answer: Extract<BridgeAnswer, { ok: false }>): FlowFailure {
   const detail = answer.error.message || undefined;
   switch (answer.error.code) {
     case "rejected":
@@ -450,7 +458,9 @@ async function stepDive(core: Core, flow: DiveRecord): Promise<void> {
       const balance = BigInt(await chain.connection.getBalance(depositor, "confirmed"));
       await core.patchView(flow.address, { cluster: cluster.cluster });
       await storePublicBalance(core, flow.address, balance);
-      const needed = amount + DEPOSIT_OVERHEAD + SYSTEM_RENT_MINIMUM;
+      const costs = await depositCosts(chain, settings.rpcUrl);
+      flow.overhead = costs.overhead.toString();
+      const needed = amount + costs.overhead + costs.minimum;
       if (balance < needed) throw fail("insufficient-public", { amount: balance.toString(), limit: needed.toString() });
       const screener = core.env.screener(settings, chain);
       let info;
@@ -635,7 +645,7 @@ export function wireReason(error: unknown): Pick<Failure, "reason"> {
   return error instanceof WireError && error.reason ? { reason: error.reason } : {};
 }
 
-function screeningFailure(url: string, error: unknown): FlowFailure {
+export function screeningFailure(url: string, error: unknown): FlowFailure {
   if (!(error instanceof WireError)) return fail("screener-unreachable", { retry: true, detail: describeNetworkError(url, error) });
   switch (error.code) {
     case "denied":
@@ -654,7 +664,7 @@ function screeningFailure(url: string, error: unknown): FlowFailure {
   }
 }
 
-function programFailure(kind: string): FlowFailure {
+export function programFailure(kind: string): FlowFailure {
   switch (kind) {
     case "DepositsPaused":
       return fail("deposits-paused");
@@ -744,7 +754,7 @@ async function diveAnswer(core: Core, flow: DiveRecord, answer: BridgeAnswer): P
  * The pool's lookup table, as the screening service named it. Only a frozen table is used: its
  * addresses cannot change between the screening and the moment the deposit runs.
  */
-async function poolTable(chain: Chain, address: string | undefined): Promise<AddressLookupTableAccount | null> {
+export async function poolTable(chain: Chain, address: string | undefined): Promise<AddressLookupTableAccount | null> {
   if (!address) return null;
   const { value } = await chain.connection.getAddressLookupTable(new PublicKey(address), { commitment: "confirmed" });
   if (!value || !value.isActive() || value.state.authority !== undefined) throw fail("screener-mismatch");
@@ -802,7 +812,7 @@ function walletAdditionsProblem(ours: AnyTransaction, theirs: AnyTransaction, sc
 }
 
 /** The same transaction with every signature slot empty: what the wallet is shown. */
-function unsignedCopy(transaction: AnyTransaction): AnyTransaction {
+export function unsignedCopy(transaction: AnyTransaction): AnyTransaction {
   return transaction instanceof TransactionV1 ? new TransactionV1(transaction.message) : new VersionedTransaction(transaction.message);
 }
 
@@ -866,6 +876,7 @@ function spendActivity(runtime: WalletRuntime, flow: SpendRecord, status: "confi
     // For a payment code, the address in it: the secret has no business in the activity list.
     // For a claim link there is nobody to name: the address of its keys is nobody's.
     ...(flow.claim ? { claim: true as const } : flow.to ? { counterparty: flow.payee ?? flow.to } : {}),
+    ...(flow.move ? { move: true as const } : {}),
     // A transaction id is the relayer's word. It is shown only with a transfer the chain confirmed.
     ...(status === "confirmed" && flow.signature ? { signature: flow.signature } : {}),
   } as const;
@@ -882,13 +893,13 @@ function forgetProofs(flow: SpendRecord): void {
 }
 
 /** Lets the flow's notes go and forgets its proofs. See `forgetProofs` for when that is allowed. */
-async function letGo(core: Core, runtime: WalletRuntime, flow: SpendRecord, activity: "failed" | "keep"): Promise<void> {
+export async function letGo(core: Core, runtime: WalletRuntime, flow: SpendRecord, activity: "failed" | "keep"): Promise<void> {
   await releasePending(core, runtime, flow.id, activity);
   forgetProofs(flow);
 }
 
 /** Writes (or rewrites) the flow's reservation: its notes, the outputs and roots of all its proofs. */
-async function reserve(core: Core, runtime: WalletRuntime, flow: SpendRecord): Promise<void> {
+export async function reserve(core: Core, runtime: WalletRuntime, flow: SpendRecord): Promise<void> {
   if (!flow.inputs) return;
   const fee = BigInt(flow.request?.extData.fee ?? flow.fee);
   const leaving = flow.kind === "consolidate" ? fee : BigInt(flow.amount) + fee;
@@ -911,7 +922,7 @@ async function reserve(core: Core, runtime: WalletRuntime, flow: SpendRecord): P
 }
 
 /** The chain shows the transfer. Record it and finish. */
-async function succeed(core: Core, runtime: WalletRuntime, flow: SpendRecord): Promise<void> {
+export async function succeed(core: Core, runtime: WalletRuntime, flow: SpendRecord): Promise<void> {
   runtime.activity = addActivity(runtime.activity, spendActivity(runtime, flow, "confirmed", core.env.now()));
   await core.store.saveActivity(runtime);
   if (runtime.pending.some((entry) => entry.flowId === flow.id)) await releasePending(core, runtime, flow.id, "keep");
@@ -941,7 +952,7 @@ function sameNotes(notes: readonly OwnedNote[], commitments: readonly string[]):
  *            root they name has left the on-chain root history
  *   bound    one may still land: the flow must go on spending exactly the same notes
  */
-async function earlierProofs(chain: Chain, runtime: WalletRuntime, flow: SpendRecord): Promise<"none" | "landed" | "dead" | "bound"> {
+export async function earlierProofs(chain: Chain, runtime: WalletRuntime, flow: SpendRecord): Promise<"none" | "landed" | "dead" | "bound"> {
   if (!flow.inputs || !flow.proofs || flow.proofs.length === 0) return "none";
   if (landed(runtime, flow)) return "landed";
   if (notesSpent(runtime, flow)) return "dead";
@@ -952,6 +963,8 @@ async function earlierProofs(chain: Chain, runtime: WalletRuntime, flow: SpendRe
 }
 
 async function stepSpend(core: Core, flow: SpendRecord): Promise<void> {
+  // A move has steps of its own until the relayer has it; confirming is a spend's like any other.
+  if (flow.move && flow.step !== "confirming") return stepMove(core, flow);
   const { settings, chain } = await core.chain();
   const runtime = await core.store.runtime(flow.address);
   if (!runtime) throw fail("locked");
@@ -1147,7 +1160,7 @@ async function stepSpend(core: Core, flow: SpendRecord): Promise<void> {
  * lets the notes go: the chain is asked, and unless the chain shows the proofs dead the flow
  * keeps its notes and can only try again with the same ones.
  */
-async function relayFailed(core: Core, chain: Chain, runtime: WalletRuntime, flow: SpendRecord, error: unknown): Promise<void> {
+export async function relayFailed(core: Core, chain: Chain, runtime: WalletRuntime, flow: SpendRecord, error: unknown): Promise<void> {
   const settings = await core.settings();
   const code = error instanceof WireError ? error.code : "network_error";
   const detail = wireDetail(settings.relayerUrl, error);
@@ -1219,9 +1232,11 @@ export async function flowBridgeAnswer(core: Core, flowId: string, request: Brid
     flow.status = "running";
     if (flow.kind === "unlock") await unlockAnswer(core, flow, request, answer);
     else if (flow.kind === "dive") await diveAnswer(core, flow, answer);
+    else if (flow.kind === "surface" && flow.move) await moveAnswer(core, flow, answer);
     else throw fail("internal");
   } catch (error) {
-    if (flow.kind === "unlock" || flow.kind === "dive") await closeBridgeTab(core);
+    if (flow.kind === "unlock" || flow.kind === "dive" || (flow.kind === "surface" && flow.move)) await closeBridgeTab(core);
+    if (flow.kind === "surface" && flow.move) await releaseMove(core, flow);
     await core.failFlow(flow, toFailure(error, flow, await core.settings()));
     return;
   }
@@ -1233,6 +1248,7 @@ export async function cancelFlow(core: Core): Promise<void> {
   if (!flow) return;
   if (flow.status === "waiting") {
     await closeBridgeTab(core);
+    if (isSpend(flow)) await releaseMove(core, flow);
     await core.failFlow(flow, { code: "cancelled", moved: "no", retry: false });
     return;
   }
@@ -1247,17 +1263,25 @@ export async function cancelFlow(core: Core): Promise<void> {
  * changed and the user agreed to the new one: the flow goes on with it, in place, so that a
  * spend whose earlier attempt is still with a relayer keeps its notes.
  */
-export async function retryFlow(core: Core, fee?: bigint): Promise<void> {
+export async function retryFlow(core: Core, fee?: bigint, minOut?: bigint): Promise<void> {
   const flow = await core.flow();
   if (!flow || flow.status !== "failed" || !flow.failure?.retry) {
-    // A changed fee is the one failure that is not retried as it is, but may be with the new fee.
-    if (!(flow && flow.status === "failed" && fee !== undefined && (isSpend(flow) || flow.kind === "claim") && flow.failure?.code === "fee-changed")) {
+    // Two failures are not retried as they are, but may be with what the user now agrees to: a
+    // changed fee, and a swap whose price moved (a new minimum, the same notes).
+    const newFee = fee !== undefined && !!flow && (isSpend(flow) || flow.kind === "claim") && flow?.failure?.code === "fee-changed";
+    const newPrice = minOut !== undefined && flow?.kind === "swap" && flow.failure?.code === "price-moved";
+    if (!(flow && flow.status === "failed" && (newFee || newPrice))) {
       throw new LochError("INVALID_ARGUMENT", "there is nothing to try again");
     }
   }
+  if (minOut !== undefined) {
+    if (flow.kind !== "swap" || minOut <= 0n) throw new LochError("INVALID_ARGUMENT", "swap");
+    flow.minOut = minOut.toString();
+  }
   if (fee !== undefined) {
     if (!isSpend(flow) && flow.kind !== "claim") throw new LochError("INVALID_ARGUMENT", "this action has no relayer fee");
-    if (fee > BigInt((await core.settings()).maxFeeLamports)) throw new LochError("INVALID_ARGUMENT", "fee:above-limit");
+    const cap = isSpend(flow) && flow.pool === 2 ? await feeCap(core, flow.mint ?? NATIVE_MINT) : BigInt((await core.settings()).maxFeeLamports);
+    if (fee > cap) throw new LochError("INVALID_ARGUMENT", "fee:above-limit");
     flow.fee = fee.toString();
   }
   delete flow.failure;
@@ -1288,8 +1312,10 @@ export async function dismissFlow(core: Core): Promise<void> {
 export async function bridgeTabClosed(core: Core): Promise<void> {
   const flow = await core.flow();
   if (!flow || (flow.status !== "waiting" && flow.status !== "running")) return;
-  const usesBridge = flow.kind === "unlock" ? flow.step !== "syncing" : flow.kind === "dive" && flow.step === "signing";
-  if (usesBridge) await core.failFlow(flow, { code: "connect-page", moved: "no", retry: true, detail: "the connect page was closed" });
+  const usesBridge = flow.kind === "unlock" ? flow.step !== "syncing" : (flow.kind === "dive" || (flow.kind === "surface" && flow.move === true)) && flow.step === "signing";
+  if (!usesBridge) return;
+  if (isSpend(flow)) await releaseMove(core, flow);
+  await core.failFlow(flow, { code: "connect-page", moved: "no", retry: true, detail: "the connect page was closed" });
 }
 
 /**
@@ -1334,6 +1360,10 @@ export async function resumeFlow(core: Core): Promise<void> {
     const runtime = await core.store.runtime(flow.address).catch(() => null);
     if (!runtime) {
       await core.failFlow(flow, { code: "locked", moved: "unknown", retry: true });
+      return;
+    }
+    if (flow.pool === 2) {
+      await resumeSendingV2(core, runtime, flow);
       return;
     }
     const sync = await syncWalletNow(core, flow.address);
